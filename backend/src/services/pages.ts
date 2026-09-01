@@ -269,6 +269,24 @@ function decryptPageTokens<T extends { id: string; accessToken: string; whatsapp
     return page;
 }
 
+/** Per-page reply automation counts surfaced by getPages (auto-replies only). */
+type ReplyBreakdown = { ai: number; template: number; postReply: number };
+type PageStats = {
+    commentsCount: number;
+    repliesCount: number;
+    breakdown: ReplyBreakdown;
+    lastActivity: number | null;
+};
+const EMPTY_BREAKDOWN: ReplyBreakdown = { ai: 0, template: 0, postReply: 0 };
+
+/** The fresh, best-effort per-page enrichments getPages layers on top of stats. */
+type PageEnrichments = {
+    triggerPageIds: Set<string>;
+    catalogCountByPage: Map<string, number>;
+    storesAnsweringPolicies: Set<string>;
+    storePlatformById: Map<string, EcommercePlatform>;
+};
+
 export class PagesService {
     private logger: Logger = noopLogger;
     /**
@@ -389,26 +407,47 @@ export class PagesService {
             .orderBy(desc(pages.createdAt))
             .limit(100);
 
-        type ReplyBreakdown = { ai: number; template: number; postReply: number };
-        type PageStats = {
-            commentsCount: number;
-            repliesCount: number;
-            breakdown: ReplyBreakdown;
-            lastActivity: number | null;
-        };
-        const emptyBreakdown: ReplyBreakdown = { ai: 0, template: 0, postReply: 0 };
         const emptyStats: PageStats & { replyRate: number } = {
-            commentsCount: 0, repliesCount: 0, breakdown: emptyBreakdown, replyRate: 0, lastActivity: null,
+            commentsCount: 0, repliesCount: 0, breakdown: EMPTY_BREAKDOWN, replyRate: 0, lastActivity: null,
         };
         if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: safeDecryptToken(p.accessToken, { entity: 'page', id: p.id }), whatsappAccessToken: safeDecryptToken(p.whatsappAccessToken, { entity: 'page', id: p.id }) || null, ...emptyStats }));
 
-        // Stats are best-effort — if the query fails, pages still load with zeroed stats
-        // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
-        // Cache stats in Redis to avoid repeated GROUP BY aggregations on every dashboard load
-        //
-        // `repliesCount` and `breakdown` cover auto-replies only
-        // (ai + template + post_reply) — the metric measures platform
-        // automation, not merchant-driven manual handling.
+        // Stats are cached (60s); the three per-page enrichments are always fresh.
+        // Stats first, then enrichments — each is internally parallel, and this
+        // order is unchanged from before the extraction (same runtime behaviour).
+        const statsMap = await this.loadPageStats(workspaceId);
+        const { triggerPageIds, catalogCountByPage, storesAnsweringPolicies, storePlatformById } =
+            await this.loadPageEnrichments(workspaceId, workspacePages);
+
+        return workspacePages.map(page => {
+            const stats = statsMap.get(page.id) ?? {
+                commentsCount: 0, repliesCount: 0, breakdown: { ...EMPTY_BREAKDOWN }, lastActivity: null,
+            };
+            return {
+                ...page,
+                accessToken: safeDecryptToken(page.accessToken, { entity: 'page', id: page.id }),
+                whatsappAccessToken: safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null,
+                ...stats,
+                replyRate: stats.commentsCount > 0
+                    ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
+                    : 0,
+                hasPostReplyTrigger: triggerPageIds.has(page.id),
+                catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
+                storeAnswersPolicies: !!page.ecommerceStoreId && storesAnsweringPolicies.has(page.ecommerceStoreId),
+                ecommerceStorePlatform: (page.ecommerceStoreId && storePlatformById.get(page.ecommerceStoreId)) || null,
+            };
+        });
+    }
+
+    /**
+     * Per-page auto-reply stats for a workspace, keyed by page id. Cached in
+     * Redis (60s TTL) to avoid the three GROUP BY aggregations on every
+     * dashboard load. Best-effort: a query failure returns whatever was gathered
+     * (empty on a cold cache) rather than sinking the page list. `repliesCount`
+     * and `breakdown` cover auto-replies only (ai + template + post_reply) — the
+     * metric measures platform automation, not merchant-driven manual handling.
+     */
+    private async loadPageStats(workspaceId: string): Promise<Map<string, PageStats>> {
         const cacheKey = pagesStatsCacheKey(workspaceId);
         const statsMap = new Map<string, PageStats>();
         const countByMethod = (table: typeof comments | typeof instagramComments | typeof messages, method: string) =>
@@ -421,6 +460,7 @@ export class PagesService {
                     statsMap.set(pageId, stats);
                 }
             } else {
+                // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id.
                 const [fbRows, igRows, msgRows] = await Promise.all([
                     db.select({
                         pageId: pages.id,
@@ -468,7 +508,7 @@ export class PagesService {
                 const mergeRows = (rows: typeof fbRows) => {
                     for (const row of rows) {
                         const existing = statsMap.get(row.pageId) ?? {
-                            commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
+                            commentsCount: 0, repliesCount: 0, breakdown: { ...EMPTY_BREAKDOWN }, lastActivity: null,
                         };
                         const ai = Number(row.aiCount);
                         const template = Number(row.templateCount);
@@ -501,11 +541,20 @@ export class PagesService {
         } catch (err) {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
+        return statsMap;
+    }
 
-        // Three per-page enrichments, all fresh (kept OUT of the 60s stats cache),
-        // all best-effort (a failure zeroes its own result and never sinks the
-        // page list), and independent — so they run CONCURRENTLY: getPages is the
-        // dashboard's hot path, and serial awaits here were pure added latency.
+    /**
+     * The three per-page enrichments getPages layers on top of stats, all fresh
+     * (kept OUT of the 60s stats cache), all best-effort (a failure zeroes its
+     * own result and never sinks the page list), and independent — so they run
+     * CONCURRENTLY: getPages is the dashboard's hot path, and serial awaits here
+     * were pure added latency.
+     */
+    private async loadPageEnrichments(
+        workspaceId: string,
+        workspacePages: { ecommerceStoreId: string | null }[],
+    ): Promise<PageEnrichments> {
         const triggerPageIds = new Set<string>();
         const catalogCountByPage = new Map<string, number>();
         const storesAnsweringPolicies = new Set<string>();
@@ -588,25 +637,7 @@ export class PagesService {
                 }
             })(),
         ]);
-
-        return workspacePages.map(page => {
-            const stats = statsMap.get(page.id) ?? {
-                commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
-            };
-            return {
-                ...page,
-                accessToken: safeDecryptToken(page.accessToken, { entity: 'page', id: page.id }),
-                whatsappAccessToken: safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null,
-                ...stats,
-                replyRate: stats.commentsCount > 0
-                    ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
-                    : 0,
-                hasPostReplyTrigger: triggerPageIds.has(page.id),
-                catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
-                storeAnswersPolicies: !!page.ecommerceStoreId && storesAnsweringPolicies.has(page.ecommerceStoreId),
-                ecommerceStorePlatform: (page.ecommerceStoreId && storePlatformById.get(page.ecommerceStoreId)) || null,
-            };
-        });
+        return { triggerPageIds, catalogCountByPage, storesAnsweringPolicies, storePlatformById };
     }
 
     /**
