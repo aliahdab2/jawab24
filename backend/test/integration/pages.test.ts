@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getTableColumns } from 'drizzle-orm';
-import { createTestUser, createTestPage, createTestWorkspace, insertPost, insertComment, insertInstagramMedia, insertInstagramComment } from './setup';
+import { eq, getTableColumns } from 'drizzle-orm';
+import { testDb, createTestUser, createTestPage, createTestWorkspace, insertPost, insertComment, insertInstagramMedia, insertInstagramComment } from './setup';
 import * as schema from '../../src/db/schema';
 import { pagesService } from '../../src/services/pages';
 
@@ -175,5 +175,74 @@ describe('pagesService.disconnectWhatsApp — integration', () => {
         expect(updated?.whatsappCoexistence).toBeNull();
         expect(updated?.whatsappAccessToken).toBeNull();
         expect(updated?.whatsappPhoneNumberId).toBeNull();
+    });
+});
+
+describe('pagesService channel auto-reply toggles — integration', () => {
+    // These pin the ACTUAL column each toggle writes, read back from the DB.
+    // Every other test of the toggles mocks pagesService at the module boundary,
+    // so a cross-wired column inside setChannelAutoReply (the computed-key
+    // .set() the two public methods share) would keep the whole suite green.
+    // Each test asserts the sibling column is untouched — that IS the cross-wire
+    // detector, not decoration.
+    async function readAutoReplyColumns(pageId: string) {
+        const [row] = await testDb
+            .select({
+                instagram: schema.pages.instagramAutoReplyEnabled,
+                whatsapp: schema.pages.whatsappAutoReplyEnabled,
+            })
+            .from(schema.pages)
+            .where(eq(schema.pages.id, pageId));
+        return row;
+    }
+
+    it('toggleInstagramAutoReply flips only the Instagram column', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, {
+            workspaceId: workspace.id,
+            instagramAutoReplyEnabled: false,
+            whatsappAutoReplyEnabled: false,
+        });
+
+        const updated = await pagesService.toggleInstagramAutoReply(workspace.id, page.id, true);
+        expect(updated.instagramAutoReplyEnabled).toBe(true);
+
+        const row = await readAutoReplyColumns(page.id);
+        expect(row.instagram).toBe(true);
+        expect(row.whatsapp).toBe(false);
+    });
+
+    it('toggleWhatsAppAutoReply flips only the WhatsApp column', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, {
+            workspaceId: workspace.id,
+            instagramAutoReplyEnabled: false,
+            whatsappAutoReplyEnabled: false,
+        });
+
+        const updated = await pagesService.toggleWhatsAppAutoReply(workspace.id, page.id, true);
+        expect(updated.whatsappAutoReplyEnabled).toBe(true);
+
+        const row = await readAutoReplyColumns(page.id);
+        expect(row.whatsapp).toBe(true);
+        expect(row.instagram).toBe(false);
+    });
+
+    it('does not write a page outside the given workspace', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const otherWorkspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, {
+            workspaceId: workspace.id,
+            instagramAutoReplyEnabled: false,
+        });
+
+        const updated = await pagesService.toggleInstagramAutoReply(otherWorkspace.id, page.id, true);
+        expect(updated).toBeUndefined();
+
+        const row = await readAutoReplyColumns(page.id);
+        expect(row.instagram).toBe(false);
     });
 });
