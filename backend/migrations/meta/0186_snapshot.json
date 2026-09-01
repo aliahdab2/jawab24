@@ -1,5 +1,5 @@
 {
-  "id": "12ffdaa1-d28b-48dc-917c-a6a2267787cd",
+  "id": "a7b55165-b181-4b16-abab-1024b561126e",
   "prevId": "15c86224-0fcc-4a3b-b00c-3133f875bbf6",
   "version": "7",
   "dialect": "postgresql",
@@ -3833,12 +3833,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "customer_contact": {
-          "name": "customer_contact",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "customer_address": {
           "name": "customer_address",
           "type": "text",
@@ -3911,6 +3905,24 @@
         "vat_note": {
           "name": "vat_note",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

@@ -2418,7 +2418,9 @@ export const invoices = pgTable('invoices', {
     // the business, while the account is a person.
     customerName: varchar('customer_name', { length: 255 }).notNull(),
     customerEmail: varchar('customer_email', { length: 255 }),
-    customerContact: varchar('customer_contact', { length: 255 }),
+    // Country, or a fuller address. The house invoice prints one line here
+    // («الجمهورية العربية السورية») — there is deliberately no separate
+    // contact/attention field, because the template does not print one.
     customerAddress: text('customer_address'),
 
     // --- what it says ---------------------------------------------------
@@ -2439,10 +2441,25 @@ export const invoices = pgTable('invoices', {
     subtotalCents: integer('subtotal_cents').notNull(),
     vatCents: integer('vat_cents').notNull().default(0),
     totalCents: integer('total_cents').notNull(),
-    // Why the VAT is what it is, printed verbatim on the document. For our
-    // customers today this is always the outside-the-EU exemption, but the
-    // reason belongs ON the invoice, not in a developer's head.
+    // Why the VAT is what it is. Printed beside the VAT row — and the VAT row
+    // itself only renders when `vat_cents > 0`, because our customers are
+    // outside the EU and a "VAT 0%" line plus an explanation is noise on every
+    // invoice we actually send. Kept so the capability survives if VAT ever
+    // applies to a customer.
     vatNote: text('vat_note'),
+    // How the money moved: «حوالة مصرفية», «شام كاش», «نقداً». Free text, not
+    // an enum — this is a phrase printed on a document, and the rails we accept
+    // change faster than a CHECK constraint should. Its meta box is omitted
+    // when absent rather than printed blank.
+    paymentMethod: varchar('payment_method', { length: 64 }),
+    // Free-text «ملاحظات» section. Omitted entirely when null.
+    notes: text('notes'),
+    // When the money was received. Drives the paid badge, and is deliberately
+    // SEPARATE from `status`: paid is orthogonal to issued/sent/void — an
+    // invoice can be sent and unpaid, or paid before it was ever emailed. Null
+    // means the document makes no claim about payment, which is the safe
+    // default: an invoice that wrongly says "paid" is worse than useless.
+    paidAt: timestamp('paid_at'),
 
     // --- lifecycle ------------------------------------------------------
     issueDate: timestamp('issue_date').defaultNow().notNull(),

@@ -34,8 +34,8 @@ import { brandLogoDataUri } from '../../utils/brandLogo';
 export interface CreateInvoiceInput {
     lang: InvoiceLang;
     customerName: string;
-    customerContact?: string | null;
     customerEmail?: string | null;
+    /** Country, or a fuller address. Printed verbatim under the email. */
     customerAddress?: string | null;
     lineDescription: string;
     lineDetail?: string | null;
@@ -46,31 +46,55 @@ export interface CreateInvoiceInput {
     subtotalCents: number;
     vatCents: number;
     planId?: string | null;
-    paymentNote?: string | null;
+    /** «حوالة مصرفية», «شام كاش», «نقداً» — printed in its own meta box. */
+    paymentMethod?: string | null;
+    /** Free-text «ملاحظات». */
+    notes?: string | null;
+    /** Set ONLY when the money is actually in. Renders the paid badge. */
+    paidAt?: Date | null;
 }
 
-/** The seller block, assembled from config once per render. */
-function seller(): InvoiceSeller {
+/**
+ * The supplier block, assembled from config once per render. Three printed
+ * fields — see utils/invoiceTemplate.ts for why that is the whole block.
+ *
+ * The brand name is per-language because the brand has two forms and the house
+ * invoice uses the Arabic one: «جواب24» on an Arabic invoice, "Jawab24" on an
+ * English one.
+ */
+function seller(lang: InvoiceLang): InvoiceSeller {
     const c = config.invoicing;
     return {
-        displayName: c.displayName,
-        legalName: c.legalName,
-        legalForm: c.legalForm,
-        registrationNumber: c.registrationNumber,
-        addressLines: c.addressLines,
+        displayName: lang === 'ar' ? c.displayNameAr : c.displayName,
         contactEmail: c.contactEmail,
         website: c.website,
     };
 }
 
-function vatNoteFor(lang: InvoiceLang): string {
+/**
+ * The VAT explanation, used only when VAT is actually charged.
+ *
+ * With `vatCents === 0` neither the row nor this note is rendered at all: our
+ * customers are outside the EU, and a "VAT 0%" line plus a paragraph explaining
+ * why is noise on every invoice we send. `null` keeps that out of the stored row
+ * too, so the archived document and the record agree.
+ */
+function vatNoteFor(lang: InvoiceLang, vatCents: number): string | null {
+    if (vatCents <= 0) return null;
     return lang === 'ar' ? config.invoicing.vatNoteAr : config.invoicing.vatNoteEn;
 }
 
-/** `JW24-2026-7` → `JW24-2026-007`. Zero-padded so a printed series sorts and
- *  reads as a series rather than as unrelated numbers. */
+/**
+ * `JW24-2026-7` → `JW24-2026-0007`.
+ *
+ * FOUR digits, matching the number already in the world: the hand-issued
+ * InMedia invoice of 2026-08-08 is `JW24-2026-0001`. A three-digit series would
+ * have collided with it and produced two invoices numbered 001.
+ */
+const SEQ_DIGITS = 4;
+
 export function formatInvoiceNumber(series: string, year: number, seq: number): string {
-    return `${series}-${year}-${String(seq).padStart(3, '0')}`;
+    return `${series}-${year}-${String(seq).padStart(SEQ_DIGITS, '0')}`;
 }
 
 /**
@@ -135,9 +159,8 @@ class AdminInvoicesService {
                 lang: input.lang,
                 number,
                 issueDate,
-                seller: seller(),
+                seller: seller(input.lang),
                 customerName: input.customerName,
-                customerContact: input.customerContact,
                 customerEmail: input.customerEmail,
                 customerAddress: input.customerAddress,
                 lineDescription: input.lineDescription,
@@ -149,9 +172,11 @@ class AdminInvoicesService {
                 subtotalCents: input.subtotalCents,
                 vatCents: input.vatCents,
                 totalCents,
-                vatNote: vatNoteFor(input.lang),
+                vatNote: vatNoteFor(input.lang, input.vatCents),
+                paymentMethod: input.paymentMethod,
+                notes: input.notes,
+                paidAt: input.paidAt,
                 logoDataUri: await brandLogoDataUri(),
-                paymentNote: input.paymentNote,
             };
 
             const pdf = await renderInvoicePdf(invoiceHtml(view));
@@ -165,7 +190,6 @@ class AdminInvoicesService {
                 userId,
                 customerName: input.customerName,
                 customerEmail: input.customerEmail ?? null,
-                customerContact: input.customerContact ?? null,
                 customerAddress: input.customerAddress ?? null,
                 lang: input.lang,
                 currency: input.currency.toUpperCase(),
@@ -177,7 +201,10 @@ class AdminInvoicesService {
                 subtotalCents: input.subtotalCents,
                 vatCents: input.vatCents,
                 totalCents,
-                vatNote: vatNoteFor(input.lang),
+                vatNote: vatNoteFor(input.lang, input.vatCents),
+                paymentMethod: input.paymentMethod ?? null,
+                notes: input.notes ?? null,
+                paidAt: input.paidAt ?? null,
                 issueDate,
                 status: 'issued',
                 createdByAdminUserId: adminUserId,
@@ -217,13 +244,11 @@ class AdminInvoicesService {
     async previewInvoice(input: CreateInvoiceInput): Promise<Buffer> {
         const view: InvoiceView = {
             lang: input.lang,
-            number: formatInvoiceNumber(config.invoicing.series, new Date().getUTCFullYear(), 0)
-                .replace(/-0+$/, '-•••'),
+            number: `${config.invoicing.series}-${new Date().getUTCFullYear()}-••••`,
             issueDate: new Date(),
             preview: true,
-            seller: seller(),
+            seller: seller(input.lang),
             customerName: input.customerName,
-            customerContact: input.customerContact,
             customerEmail: input.customerEmail,
             customerAddress: input.customerAddress,
             lineDescription: input.lineDescription,
@@ -235,9 +260,11 @@ class AdminInvoicesService {
             subtotalCents: input.subtotalCents,
             vatCents: input.vatCents,
             totalCents: input.subtotalCents + input.vatCents,
-            vatNote: vatNoteFor(input.lang),
+            vatNote: vatNoteFor(input.lang, input.vatCents),
+            paymentMethod: input.paymentMethod,
+            notes: input.notes,
+            paidAt: input.paidAt,
             logoDataUri: await brandLogoDataUri(),
-            paymentNote: input.paymentNote,
         };
         return renderInvoicePdf(invoiceHtml(view));
     }

@@ -460,7 +460,6 @@
     "invoiceLangEn": "الإنجليزية",
     "invoiceCustomerName": "فاتورة إلى",
     "invoiceCustomerNameHelp": "المشتري القانوني — وهو اسم النشاط التجاري عادةً، لا صاحب الحساب.",
-    "invoiceContact": "عناية",
     "invoiceEmail": "بريد العميل الإلكتروني",
     "invoiceAddress": "العنوان",
     "invoiceLineDescription": "البيان",
@@ -472,8 +471,6 @@
     "invoiceVat": "ضريبة القيمة المضافة",
     "invoiceCurrency": "العملة",
     "invoiceTotal": "الإجمالي",
-    "invoicePaymentNote": "تعليمات الدفع",
-    "invoicePaymentNoteHelp": "تُطبع على الفاتورة. اتركه فارغاً لحذف قسم الدفع بالكامل.",
     "invoicePreview": "معاينة الملف",
     "invoicePreviewing": "جارٍ التجهيز…",
     "invoiceIssue": "إصدار الفاتورة",
@@ -506,7 +503,13 @@
     "invoiceSending": "جارٍ الإرسال…",
     "invoiceSendFailed": "تعذّر إرسال الفاتورة",
     "invoiceSentSuccess": "أُرسلت الفاتورة {number}",
-    "invoiceCancel": "إلغاء"
+    "invoiceCancel": "إلغاء",
+    "invoicePaymentMethod": "طريقة السداد",
+    "invoicePaymentMethodHelp": "مثال: حوالة مصرفية، شام كاش، نقداً. اتركه فارغاً لحذف الحقل من الفاتورة.",
+    "invoiceNotes": "ملاحظات",
+    "invoiceNotesHelp": "نص حر يُطبع في أسفل الفاتورة. اتركه فارغاً لحذف القسم.",
+    "invoiceMarkPaid": "تأشير الفاتورة كمدفوعة بالكامل",
+    "invoiceMarkPaidHelp": "لا تُحدِّد هذا الخيار إلا إذا وصل المبلغ فعلاً — فهو يطبع علامة «مدفوعة» على الوثيقة."
   },
   "playground": {
     "title": "ساحة تجريب الذكاء الاصطناعي",

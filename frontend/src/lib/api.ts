@@ -294,8 +294,8 @@ export const postSuggestionsApi = {
 export interface AdminInvoiceDraft {
     lang: 'ar' | 'en';
     customerName: string;
-    customerContact?: string;
     customerEmail?: string;
+    /** Country, or a fuller address. Printed verbatim under the email. */
     customerAddress?: string;
     lineDescription: string;
     lineDetail?: string;
@@ -306,7 +306,12 @@ export interface AdminInvoiceDraft {
     subtotalCents: number;
     vatCents: number;
     planId?: string;
-    paymentNote?: string;
+    /** «حوالة مصرفية», «شام كاش», «نقداً» — its box is omitted when empty. */
+    paymentMethod?: string;
+    /** Free-text «ملاحظات». */
+    notes?: string;
+    /** Set ONLY when the money is in — it renders a paid badge. */
+    paidAt?: string;
 }
 
 export interface FactRowDto {

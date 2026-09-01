@@ -460,7 +460,6 @@
     "invoiceLangEn": "English",
     "invoiceCustomerName": "Bill to",
     "invoiceCustomerNameHelp": "The legal buyer — usually the business name, not the account holder.",
-    "invoiceContact": "Attention",
     "invoiceEmail": "Customer email",
     "invoiceAddress": "Address",
     "invoiceLineDescription": "Description",
@@ -472,8 +471,6 @@
     "invoiceVat": "VAT",
     "invoiceCurrency": "Currency",
     "invoiceTotal": "Total",
-    "invoicePaymentNote": "Payment instructions",
-    "invoicePaymentNoteHelp": "Printed on the invoice. Leave empty to omit the payment panel entirely.",
     "invoicePreview": "Preview PDF",
     "invoicePreviewing": "Rendering…",
     "invoiceIssue": "Issue invoice",
@@ -506,7 +503,13 @@
     "invoiceSending": "Sending…",
     "invoiceSendFailed": "Could not send the invoice",
     "invoiceSentSuccess": "Invoice {number} sent",
-    "invoiceCancel": "Cancel"
+    "invoiceCancel": "Cancel",
+    "invoicePaymentMethod": "Payment method",
+    "invoicePaymentMethodHelp": "e.g. Bank transfer, Sham Cash, Cash. Leave empty to omit the box entirely.",
+    "invoiceNotes": "Notes",
+    "invoiceNotesHelp": "Free text printed at the bottom of the invoice. Leave empty to omit the section.",
+    "invoiceMarkPaid": "Mark as paid in full",
+    "invoiceMarkPaidHelp": "Only tick this if the money has actually arrived — it prints a PAID badge on the document."
   },
   "playground": {
     "title": "Smart Reply Playground",

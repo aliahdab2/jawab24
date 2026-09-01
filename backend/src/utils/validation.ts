@@ -724,7 +724,6 @@ export const CreateInvoiceSchema = z.object({
     // The legal buyer, typed by the admin: usually the business, while the
     // account is a person. Never defaulted from users.name silently.
     customerName: z.string().trim().min(1, 'Customer name is required').max(255),
-    customerContact: z.string().trim().max(255).optional(),
     customerEmail: z.string().trim().email('Invalid customer email').max(255).optional(),
     customerAddress: z.string().trim().max(1000).optional(),
     lineDescription: z.string().trim().min(1, 'A line description is required').max(500),
@@ -738,7 +737,11 @@ export const CreateInvoiceSchema = z.object({
     subtotalCents: invoiceCents,
     vatCents: invoiceCents,
     planId: z.string().uuid().optional(),
-    paymentNote: z.string().trim().max(500).optional(),
+    paymentMethod: z.string().trim().max(64).optional(),
+    notes: z.string().trim().max(2000).optional(),
+    // Set ONLY when the money is actually in — it renders a paid badge, and an
+    // invoice that wrongly claims payment is worse than useless.
+    paidAt: z.coerce.date().optional(),
 }).refine(
     (v) => (v.periodStart === undefined) === (v.periodEnd === undefined),
     { message: 'A billing period needs both a start and an end', path: ['periodEnd'] },

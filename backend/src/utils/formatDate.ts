@@ -27,13 +27,19 @@ function formatWith(
     lang: string,
     options: Intl.DateTimeFormatOptions,
     isoFallbackChars: number,
-    // Opt OUT of the locale's own numeral system, keeping its month names.
-    // Exactly one caller does this (`formatInvoiceDate`); see the reasoning
-    // there. Defaulting to false keeps every existing formatter unchanged.
+    // Force Latin digits while keeping the locale's month names. Exactly one
+    // caller does this (`formatInvoiceDate`); see the reasoning there.
+    // Defaulting to false keeps every existing formatter unchanged.
+    //
+    // ⚠️ It appends `-u-nu-latn` rather than merely skipping `numeralLocale`.
+    // Skipping is NOT enough: Arabic locales default to the `arab` numbering
+    // system on their own, so a bare `ar-SY` still renders «١ أيلول ٢٠٢٦». That
+    // was a real bug in this function's first version, caught by a test that
+    // asserted the absence of Arabic-Indic digits.
     latinDigits = false,
 ): string {
     try {
-        const locale = latinDigits ? lang : numeralLocale(lang);
+        const locale = latinDigits ? `${lang}-u-nu-latn` : numeralLocale(lang);
         return new Intl.DateTimeFormat(locale, options).format(d);
     } catch {
         return d.toISOString().slice(0, isoFallbackChars).replace('T', ' ');
@@ -87,10 +93,16 @@ export function formatDateLong(d: Date, lang: string): string {
  * the conversation that produced it cannot rely on "this year" being obvious.
  */
 export function formatInvoiceDate(d: Date, lang: string): string {
-    // `en` resolves to US order ("September 1, 2026"). The issuer is a Swedish
-    // business invoicing customers in the Middle East and Europe, where
-    // day-first is the norm and month-first is read as an error; `en-GB` also
-    // matches the Arabic side's "1 سبتمبر 2026" so the two language versions of
-    // one invoice agree on shape.
-    return formatWith(d, lang === 'en' ? 'en-GB' : lang, { day: 'numeric', month: 'long', year: 'numeric' }, 10, true);
+    // Two locale substitutions, both matching the house invoice
+    // (JW24-2026-0001, issued by hand 2026-08-08):
+    //
+    //  • `ar` → `ar-SY`: LEVANTINE month names. Bare `ar` gives «8 أغسطس 2026»,
+    //    but the invoice says «8 آب 2026», which is what our Syrian and Lebanese
+    //    customers read as a date. This is a document convention, so it is NOT
+    //    generalised to the rest of the product's Arabic surfaces.
+    //  • `en` → `en-GB`: day-first. Bare `en` gives US order
+    //    ("September 1, 2026"), read as an error by customers in the Middle
+    //    East and Europe, and it would disagree with the Arabic side's shape.
+    const locale = lang === 'ar' ? 'ar-SY' : lang === 'en' ? 'en-GB' : lang;
+    return formatWith(d, locale, { day: 'numeric', month: 'long', year: 'numeric' }, 10, true);
 }

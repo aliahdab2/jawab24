@@ -60,11 +60,14 @@ describe('invoice numbering (integration)', () => {
         expect(seqs[2]).toBe(seqs[1] + 1);
     });
 
-    it('zero-pads the printed number so the series reads as a series', () => {
-        expect(formatInvoiceNumber('JW24', 2026, 7)).toBe('JW24-2026-007');
-        expect(formatInvoiceNumber('JW24', 2026, 42)).toBe('JW24-2026-042');
+    it('zero-pads to FOUR digits, matching the number already in the world', () => {
+        // The hand-issued InMedia invoice of 2026-08-08 is JW24-2026-0001. A
+        // three-digit series would have collided with it.
+        expect(formatInvoiceNumber('JW24', 2026, 1)).toBe('JW24-2026-0001');
+        expect(formatInvoiceNumber('JW24', 2026, 7)).toBe('JW24-2026-0007');
+        expect(formatInvoiceNumber('JW24', 2026, 42)).toBe('JW24-2026-0042');
         // Padding is a minimum, never a truncation.
-        expect(formatInvoiceNumber('JW24', 2026, 1234)).toBe('JW24-2026-1234');
+        expect(formatInvoiceNumber('JW24', 2026, 12345)).toBe('JW24-2026-12345');
     });
 
     it('never issues the same number twice under concurrency', async () => {

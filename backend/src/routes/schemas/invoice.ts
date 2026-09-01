@@ -24,7 +24,6 @@ export const invoiceBodySchema = {
     properties: {
         lang: { type: 'string', enum: ['ar', 'en'] },
         customerName: { type: 'string', minLength: 1, maxLength: 255 },
-        customerContact: { type: 'string', maxLength: 255 },
         customerEmail: { type: 'string', format: 'email', maxLength: 255 },
         customerAddress: { type: 'string', maxLength: 1000 },
         lineDescription: { type: 'string', minLength: 1, maxLength: 500 },
@@ -36,6 +35,8 @@ export const invoiceBodySchema = {
         subtotalCents: { type: 'integer', minimum: 0, maximum: MAX_INVOICE_CENTS },
         vatCents: { type: 'integer', minimum: 0, maximum: MAX_INVOICE_CENTS },
         planId: { type: 'string', format: 'uuid' },
-        paymentNote: { type: 'string', maxLength: 500 },
+        paymentMethod: { type: 'string', maxLength: 64 },
+        notes: { type: 'string', maxLength: 2000 },
+        paidAt: { type: 'string', format: 'date-time' },
     },
 } as const;

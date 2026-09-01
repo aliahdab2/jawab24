@@ -45,7 +45,6 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
 
     const [lang, setLang] = useState<'ar' | 'en'>('ar');
     const [customerName, setCustomerName] = useState('');
-    const [customerContact, setCustomerContact] = useState('');
     const [customerEmail, setCustomerEmail] = useState('');
     const [customerAddress, setCustomerAddress] = useState('');
     const [lineDescription, setLineDescription] = useState('');
@@ -57,7 +56,11 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
     const [amount, setAmount] = useState('');
     const [vat, setVat] = useState('0.00');
     const [planId, setPlanId] = useState<string | undefined>(undefined);
-    const [paymentNote, setPaymentNote] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('');
+    const [notes, setNotes] = useState('');
+    // Off by default. A paid badge on an unpaid invoice is worse than useless,
+    // so claiming payment is an explicit act.
+    const [markPaid, setMarkPaid] = useState(false);
 
     // Prefill is a SUGGESTION. Everything below stays editable, because the
     // amount actually collected is routinely not the plan's list price.
@@ -107,7 +110,6 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
         return {
             lang,
             customerName: customerName.trim(),
-            customerContact: customerContact.trim() || undefined,
             customerEmail: customerEmail.trim() || undefined,
             customerAddress: customerAddress.trim() || undefined,
             lineDescription: lineDescription.trim(),
@@ -119,12 +121,14 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
             subtotalCents,
             vatCents,
             planId,
-            paymentNote: paymentNote.trim() || undefined,
+            paymentMethod: paymentMethod.trim() || undefined,
+            notes: notes.trim() || undefined,
+            paidAt: markPaid ? new Date().toISOString() : undefined,
         };
     }, [
-        amount, vat, customerName, customerContact, customerEmail, customerAddress,
+        amount, vat, customerName, customerEmail, customerAddress,
         lineDescription, lineDetail, quantityLabel, periodStart, periodEnd,
-        currency, lang, planId, paymentNote, t,
+        currency, lang, planId, paymentMethod, notes, markPaid, t,
     ]);
 
     /** Opens the rendered PDF in a new tab. No number is allocated — that is
@@ -219,27 +223,19 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                     <div>
-                        <label htmlFor="invoice-contact" className="block text-sm font-medium mb-1">
-                            {t('customer.invoiceContact')}
-                        </label>
-                        <input id="invoice-contact" dir="auto" className={FIELD_CLASS}
-                            value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} />
-                    </div>
-                    <div>
                         <label htmlFor="invoice-email" className="block text-sm font-medium mb-1">
                             {t('customer.invoiceEmail')}
                         </label>
                         <input id="invoice-email" type="email" dir="auto" className={FIELD_CLASS}
                             value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
                     </div>
-                </div>
-
-                <div>
-                    <label htmlFor="invoice-address" className="block text-sm font-medium mb-1">
-                        {t('customer.invoiceAddress')}
-                    </label>
-                    <textarea id="invoice-address" dir="auto" rows={2} className={FIELD_CLASS}
-                        value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} />
+                    <div>
+                        <label htmlFor="invoice-address" className="block text-sm font-medium mb-1">
+                            {t('customer.invoiceAddress')}
+                        </label>
+                        <input id="invoice-address" dir="auto" className={FIELD_CLASS}
+                            value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} />
+                    </div>
                 </div>
 
                 <div>
@@ -318,13 +314,33 @@ export function InvoiceModal({ isOpen, onClose, userId, onIssued }: Props) {
                 </div>
 
                 <div>
-                    <label htmlFor="invoice-payment-note" className="block text-sm font-medium mb-1">
-                        {t('customer.invoicePaymentNote')}
+                    <label htmlFor="invoice-payment-method" className="block text-sm font-medium mb-1">
+                        {t('customer.invoicePaymentMethod')}
                     </label>
-                    <input id="invoice-payment-note" dir="auto" className={FIELD_CLASS}
-                        value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} />
-                    <p className="text-xs text-muted-foreground mt-1">{t('customer.invoicePaymentNoteHelp')}</p>
+                    <input id="invoice-payment-method" dir="auto" className={FIELD_CLASS}
+                        value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-1">{t('customer.invoicePaymentMethodHelp')}</p>
                 </div>
+
+                <div>
+                    <label htmlFor="invoice-notes" className="block text-sm font-medium mb-1">
+                        {t('customer.invoiceNotes')}
+                    </label>
+                    <textarea id="invoice-notes" dir="auto" rows={3} className={FIELD_CLASS}
+                        value={notes} onChange={(e) => setNotes(e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-1">{t('customer.invoiceNotesHelp')}</p>
+                </div>
+
+                {/* Opt-in, never a default: a paid badge on an unpaid invoice is
+                    worse than no invoice at all. */}
+                <label htmlFor="invoice-paid" className="flex items-start gap-2 text-sm">
+                    <input id="invoice-paid" type="checkbox" className="mt-1"
+                        checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
+                    <span>
+                        {t('customer.invoiceMarkPaid')}
+                        <span className="block text-xs text-muted-foreground">{t('customer.invoiceMarkPaidHelp')}</span>
+                    </span>
+                </label>
 
                 {/* Preview first, issue second — and the order is the point. An
                     issued number cannot be handed back, so looking is free and

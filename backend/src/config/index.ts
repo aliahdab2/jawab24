@@ -539,27 +539,25 @@ export const config = {
         replyToEmail: process.env.RESEND_REPLY_TO || '',
     },
 
-    // Invoicing — the seller block printed on every manually-issued invoice.
+    // Invoicing — the supplier block printed on every manually-issued invoice.
     //
-    // These are legally required on a Swedish invoice (name, address,
-    // registration number), and they are NOT secrets: the identical values are
-    // published on /terms §13, which is where these defaults come from. They
-    // are config rather than constants so a change of address or a move to a
-    // limited company is an env edit and a restart, not a release — and so the
-    // test suite never prints a real registered address.
+    // THREE printed fields: name, site, email. That is the whole supplier block
+    // on the house invoice (JW24-2026-0001, issued by hand 2026-08-08). An
+    // earlier draft of this feature also carried the legal name, registration
+    // number and registered address; the owner's own template omits all of it,
+    // so those keys were removed rather than left here unread. Do not
+    // reintroduce them without the owner asking — see utils/invoiceTemplate.ts.
     //
-    // `displayName` is what the customer sees as the issuer. It is deliberately
-    // the trade name: the registered person is carried in `legalName` /
-    // `registrationNumber` and printed as footer small print, which is both
-    // what the owner asked for and what keeps the document valid.
+    // Config rather than constants so a change of address, brand name or
+    // contact is an env edit and a restart, not a release.
+    //
+    // The display name is per-language because the brand has two forms and the
+    // house invoice uses the Arabic one: «جواب24» on an Arabic invoice,
+    // "Jawab24" on an English one.
     invoicing: {
         displayName: process.env.INVOICE_DISPLAY_NAME || 'Jawab24',
-        legalName: process.env.INVOICE_LEGAL_NAME || 'Mohammad Ali Ahdab',
-        legalForm: process.env.INVOICE_LEGAL_FORM || 'Enskild Näringsverksamhet',
-        registrationNumber: process.env.INVOICE_REGISTRATION_NUMBER || '19810312-5335',
-        addressLines: (process.env.INVOICE_ADDRESS_LINES
-            || 'Bergavägen 15 A lgh 1002|241 39 Eslöv|Sweden').split('|').map((l) => l.trim()).filter(Boolean),
-        contactEmail: process.env.INVOICE_CONTACT_EMAIL || 'support@jawab24.com',
+        displayNameAr: process.env.INVOICE_DISPLAY_NAME_AR || 'جواب24',
+        contactEmail: process.env.INVOICE_CONTACT_EMAIL || 'info@jawab24.com',
         website: process.env.INVOICE_WEBSITE || 'jawab24.com',
         // The number series. Changing it starts a NEW sequence from 1 — which
         // is a bookkeeping decision, not a formatting one, so it lives here
