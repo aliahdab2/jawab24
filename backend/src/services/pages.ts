@@ -1268,85 +1268,18 @@ export class PagesService {
         const existingPages = await this.getPages(workspaceId);
         const existingPagesMap = new Map(existingPages.filter(p => p.facebookPageId !== null && p.facebookPageId !== undefined).map(p => [p.facebookPageId as string, p]));
 
-        // 2. Disable pages that the user revoked access to in Facebook.
-        // If a page exists in DB but was NOT returned by Facebook's /me/accounts,
-        // the user deselected it in Facebook's permission dialog — disable it.
-        // This MUST run before the plan-slot check below: a deselected page's slot
-        // has to be free for pages granted in the SAME sync, or the one-shot swap
-        // ("drop N pages, keep A, add B" in one edit of the Meta grant) refuses B
-        // on the first attempt and only succeeds on an identical retry.
+        // 2. Disable pages the user deselected in Facebook's permission dialog (in
+        // the DB but not returned by /me/accounts). MUST run before the plan-slot
+        // check below so a deselected page's slot is free for pages granted in the
+        // SAME sync — else the one-shot swap ("drop N pages, keep A, add B" in one
+        // edit of the Meta grant) refuses B on the first attempt and only succeeds
+        // on an identical retry.
         const returnedFbPageIds = new Set(fbPages.data.map(p => p.id));
-        const revokedPages = existingPages.filter(p => p.facebookPageId && !returnedFbPageIds.has(p.facebookPageId));
+        const revokedPages = await this.disableRevokedPages(existingPages, returnedFbPageIds, workspaceId, userId, logger);
 
-        for (const revokedPage of revokedPages) {
-            logger.info(`[Pages] Page "${revokedPage.name}" (${revokedPage.facebookPageId}) was not returned by Facebook — disabling auto-reply`);
-            await db
-                .update(pages)
-                .set({
-                    autoReplyEnabled: false,
-                    // Clear any prior reason — the blanked access token is the
-                    // authoritative disconnect signal here, and a stale system
-                    // reason ('trial_block'/'auto_pause') would misdescribe the
-                    // page in the admin UI and the comment-ingestion gate.
-                    autoReplyDisabledReason: null,
-                    instagramAutoReplyEnabled: false,
-                    accessToken: '',
-                    tokenLastVerifiedAt: null,
-                    updatedAt: new Date(),
-                })
-                .where(eq(pages.id, revokedPage.id));
-            // Audit the off-transition when the page was actually replying before
-            // (deselected in the FB permission dialog). Skip already-off pages so a
-            // routine re-sync doesn't emit phantom events.
-            if (revokedPage.autoReplyEnabled) {
-                logAutoReplyToggle({
-                    pageId: revokedPage.id,
-                    workspaceId,
-                    userId,
-                    enabled: false,
-                    previous: true,
-                    reason: 'fb_sync',
-                });
-            }
-        }
-
-        if (revokedPages.length > 0) {
-            logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
-        }
-
-        // 3. Process Facebook pages in parallel (optimizes external API calls)
-        const processPromises = fbPages.data.map(async (fbPage) => {
-            logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
-
-            // Check linked Instagram account
-            let instagramAccountId: string | null = null;
-            let instagramUsername: string | null = null;
-            let instagramProfilePicUrl: string | null = null;
-
-            try {
-                const igAccount = await instagramService.getLinkedInstagramAccount(
-                    fbPage.id,
-                    pageLinkedInstagramCredential(fbPage.access_token)
-                );
-                if (igAccount) {
-                    instagramAccountId = igAccount.id;
-                    instagramUsername = igAccount.username;
-                    instagramProfilePicUrl = igAccount.profile_picture_url || null;
-                    logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
-                }
-            } catch {
-                logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
-            }
-
-            return {
-                fbPage,
-                instagramAccountId,
-                instagramUsername,
-                instagramProfilePicUrl
-            };
-        });
-
-        const results = await Promise.all(processPromises);
+        // 3. Enrich each Facebook page with its linked Instagram account, in
+        // parallel (independent external API calls, one per page).
+        const results = await this.enrichPagesWithInstagram(fbPages.data, logger);
 
         // 4. Determine how many more pages can be auto-enabled
         // The trial / channel claim belongs to the BILLING account (workspace owner
@@ -1755,6 +1688,96 @@ export class PagesService {
         }
 
         return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+    }
+
+    /**
+     * Look up each Facebook page's linked Instagram account in parallel (one
+     * independent Graph call per page). A lookup failure is swallowed — the page
+     * simply syncs without an IG link. Returns each fbPage paired with its
+     * resolved IG identity (all null when unlinked or on error).
+     */
+    private async enrichPagesWithInstagram<F extends { id: string; name: string; access_token: string }>(
+        fbPages: F[],
+        logger: Logger,
+    ): Promise<Array<{ fbPage: F; instagramAccountId: string | null; instagramUsername: string | null; instagramProfilePicUrl: string | null }>> {
+        return Promise.all(fbPages.map(async (fbPage) => {
+            logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
+
+            let instagramAccountId: string | null = null;
+            let instagramUsername: string | null = null;
+            let instagramProfilePicUrl: string | null = null;
+
+            try {
+                const igAccount = await instagramService.getLinkedInstagramAccount(
+                    fbPage.id,
+                    pageLinkedInstagramCredential(fbPage.access_token)
+                );
+                if (igAccount) {
+                    instagramAccountId = igAccount.id;
+                    instagramUsername = igAccount.username;
+                    instagramProfilePicUrl = igAccount.profile_picture_url || null;
+                    logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
+                }
+            } catch {
+                logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
+            }
+
+            return { fbPage, instagramAccountId, instagramUsername, instagramProfilePicUrl };
+        }));
+    }
+
+    /**
+     * Disable every page the user deselected in Facebook's permission dialog (in
+     * the DB but not returned by /me/accounts): blank its token, turn auto-reply
+     * off on both channels, and audit the off-transition for pages that were
+     * actually replying (skip already-off pages so a routine re-sync emits no
+     * phantom events). Returns the revoked rows so the caller can report the count.
+     */
+    private async disableRevokedPages<P extends { id: string; name: string | null; facebookPageId: string | null; autoReplyEnabled: boolean | null }>(
+        existingPages: P[],
+        returnedFbPageIds: Set<string>,
+        workspaceId: string,
+        userId: string,
+        logger: Logger,
+    ): Promise<P[]> {
+        const revokedPages = existingPages.filter(p => p.facebookPageId && !returnedFbPageIds.has(p.facebookPageId));
+
+        for (const revokedPage of revokedPages) {
+            logger.info(`[Pages] Page "${revokedPage.name}" (${revokedPage.facebookPageId}) was not returned by Facebook — disabling auto-reply`);
+            await db
+                .update(pages)
+                .set({
+                    autoReplyEnabled: false,
+                    // Clear any prior reason — the blanked access token is the
+                    // authoritative disconnect signal here, and a stale system
+                    // reason ('trial_block'/'auto_pause') would misdescribe the
+                    // page in the admin UI and the comment-ingestion gate.
+                    autoReplyDisabledReason: null,
+                    instagramAutoReplyEnabled: false,
+                    accessToken: '',
+                    tokenLastVerifiedAt: null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(pages.id, revokedPage.id));
+            // Audit the off-transition when the page was actually replying before
+            // (deselected in the FB permission dialog). Skip already-off pages so a
+            // routine re-sync doesn't emit phantom events.
+            if (revokedPage.autoReplyEnabled) {
+                logAutoReplyToggle({
+                    pageId: revokedPage.id,
+                    workspaceId,
+                    userId,
+                    enabled: false,
+                    previous: true,
+                    reason: 'fb_sync',
+                });
+            }
+        }
+
+        if (revokedPages.length > 0) {
+            logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
+        }
+        return revokedPages;
     }
 
     /** Flip one channel's auto-reply column for a page, scoped to its workspace. */
