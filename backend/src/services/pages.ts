@@ -297,6 +297,16 @@ type SyncedPageRow = typeof pages.$inferSelect;
 /** The Instagram identity to attach to a page during sync (all null when unlinked). */
 type InstagramLink = { instagramAccountId: string | null; instagramUsername: string | null; instagramProfilePicUrl: string | null };
 
+/** The per-sync context threaded through the syncFromFacebook helper methods. */
+type SyncContext = {
+    workspaceId: string;
+    userId: string;
+    /** The billing account (workspace owner) that owns the trial/slot budget. */
+    billing: string;
+    logger: Logger;
+    outcome: SyncOutcome;
+};
+
 /**
  * Accumulates the per-page results of syncFromFacebook. Extracting the ten
  * counters/lists the sync loop used to thread as separate locals into one object
@@ -1417,6 +1427,7 @@ export class PagesService {
         // already-member) plus the remaining-slot budget accumulate here. See the
         // SyncOutcome class for what each record* call means (D-039, trial guard…).
         const outcome = new SyncOutcome(remainingSlots);
+        const ctx: SyncContext = { workspaceId, userId, billing, logger, outcome };
 
         // 5. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
@@ -1426,9 +1437,9 @@ export class PagesService {
             const ig = await this.resolveInstagramLink(fbPage, result, logger);
             const existingPage = existingPagesMap.get(fbPage.id);
             if (existingPage) {
-                await this.syncExistingPage(fbPage, existingPage, ig, workspaceId, userId, outcome, logger);
+                await this.syncExistingPage(fbPage, existingPage, ig, ctx);
             } else {
-                await this.connectUnmatchedPage(fbPage, ig, billing, workspaceId, userId, outcome, logger);
+                await this.connectUnmatchedPage(fbPage, ig, ctx);
             }
         }
 
@@ -1502,11 +1513,9 @@ export class PagesService {
         fbPage: FacebookPage,
         existingPage: SyncedPageRow,
         ig: InstagramLink,
-        workspaceId: string,
-        userId: string,
-        outcome: SyncOutcome,
-        logger: Logger,
+        ctx: SyncContext,
     ): Promise<void> {
+        const { workspaceId, userId, outcome, logger } = ctx;
         const { instagramAccountId, instagramUsername, instagramProfilePicUrl } = ig;
             // Industry standard (ManyChat / Chatfuel model): the access token belongs to
             // whoever originally connected the page. Only that user's sync may refresh it.
@@ -1581,12 +1590,9 @@ export class PagesService {
     private async connectUnmatchedPage(
         fbPage: FacebookPage,
         ig: InstagramLink,
-        billing: string,
-        workspaceId: string,
-        userId: string,
-        outcome: SyncOutcome,
-        logger: Logger,
+        ctx: SyncContext,
     ): Promise<void> {
+        const { workspaceId, userId, billing, logger, outcome } = ctx;
         const { instagramAccountId, instagramUsername, instagramProfilePicUrl } = ig;
             // Check if this page exists in another workspace (transferred admin access)
             const globalResults = await db
