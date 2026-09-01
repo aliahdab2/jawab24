@@ -168,6 +168,35 @@ Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elemen
 
     **And a sample is not a population.** If you read 25 of 512, say "25 of 512". State conclusions about the rest as bounds, never as fact — and prefer a sweep that can find the counter-example (a pattern search across all rows, the extreme tail) over more sampling.
 12. **Verify assumptions about external APIs** — before building features around third-party behavior (Facebook, Stripe, Shopify), confirm the actual API behavior from documentation. Never assume expiry times, refresh mechanisms, or token lifecycles — get it right first, not after
+13. **A green suite is evidence ONLY if it executes your change — the vacuous-green trap.**
+    "Suite X passed" claims coverage; a suite whose fixtures or mocks silently BYPASS the new
+    code passes no matter what the code does, and its green is worse than no evidence because
+    it reads as proof.
+
+    **The check is mechanical, run it before citing any suite in a PR:**
+    - **Enumerate the suites that cover the file you edited** — `grep -rl "<module-name>"
+      backend/test backend/src/__tests__` (and the other workspaces' test dirs). Every suite
+      that mocks or fixtures the module you changed is in scope, not just the ones you wrote.
+    - **Break the new code on purpose** (invert the new predicate, throw at the new branch's
+      entry) and re-run those suites. Each one you intend to cite must go RED. A suite that
+      stays green never executed your change — find the bypass (a fixture missing the new
+      column, a service mock without the new method, a guard short-circuiting on test-shaped
+      data) and fix the fixtures/mocks to production shape so the new path runs.
+    - **List the suites you proved in the PR body.** "All suites green" without naming them
+      is exactly how the precedent shipped.
+
+    This EXTENDS mutation-checking, not repeats it: mutation-checking proves your NEW test
+    can fail; this proves the EXISTING suites can see your code at all. Both are required.
+
+    > Precedent (2026-09-02, PR #1026 review): the token-sweep WABA probe shipped with "all
+    > three suites green (73 tests)" — but the sweep's OWN suite
+    > (`whatsappTokenHealthSweep.test.ts`, the one whose stated invariant is "a healthy number
+    > must never be disconnected") was a fourth suite the PR never named, and it never executed
+    > the probe: its `waPage()` fixtures had no `whatsappPhoneNumberId` (the guard skipped the
+    > probe on every row) and its `whatsappService` mock exported only `debugToken` (the probe
+    > would have thrown had it ever been reached). The suite guarding the exact class of damage
+    > the change could cause was structurally blind to it, and every test passed. Fixed in
+    > 6edec310 by giving fixtures the production shape and pinning the probe's behaviors there.
 
 ### 11. Dark Mode — Semantic CSS Classes
 
@@ -577,6 +606,7 @@ Local-first — no CI required:
 | Designing a new app→browser→Meta bridge | Read the working Facebook page-connect flow first (Rule 17b) — the tab must START at facebook.com, and the App Link return must be navigated by a PAGE, not a 302 |
 | "a Chrome user-agent in the logs means Chrome opened" | A Custom Tab is identical in logs — mark degradation in-band (Rule 17b) |
 | `git checkout` / `npm install` in the main checkout | Never — it breaks whatever another session is measuring |
+| "suite X is green" cited as evidence for new code | Prove the suite EXECUTES the change first — break the new code, watch that suite go red (Rule 10.13) |
 
 ---
 
