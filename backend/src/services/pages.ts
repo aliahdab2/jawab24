@@ -277,7 +277,11 @@ type PageStats = {
     breakdown: ReplyBreakdown;
     lastActivity: number | null;
 };
-const EMPTY_BREAKDOWN: ReplyBreakdown = { ai: 0, template: 0, postReply: 0 };
+// Frozen: this module-level singleton is shared by every getPages call, so an
+// accidental mutation of it would corrupt subsequent responses process-wide.
+// Freezing makes such a mutation throw in dev rather than silently corrupt; the
+// two live uses spread it (`{ ...EMPTY_BREAKDOWN }`) and never alias it directly.
+const EMPTY_BREAKDOWN: ReplyBreakdown = Object.freeze({ ai: 0, template: 0, postReply: 0 });
 
 /** The fresh, best-effort per-page enrichments getPages layers on top of stats. */
 type PageEnrichments = {
@@ -407,10 +411,9 @@ export class PagesService {
             .orderBy(desc(pages.createdAt))
             .limit(100);
 
-        const emptyStats: PageStats & { replyRate: number } = {
-            commentsCount: 0, repliesCount: 0, breakdown: EMPTY_BREAKDOWN, replyRate: 0, lastActivity: null,
-        };
-        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: safeDecryptToken(p.accessToken, { entity: 'page', id: p.id }), whatsappAccessToken: safeDecryptToken(p.whatsappAccessToken, { entity: 'page', id: p.id }) || null, ...emptyStats }));
+        // No pages → no stats/enrichment work, and the map below would produce []
+        // anyway. Return early so neither loader runs.
+        if (workspacePages.length === 0) return [];
 
         // Stats are cached (60s); the three per-page enrichments are always fresh.
         // Stats first, then enrichments — each is internally parallel, and this
