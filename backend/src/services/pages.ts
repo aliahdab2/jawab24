@@ -256,6 +256,19 @@ export interface AlreadyMemberOfEntry {
     pageName: string;
 }
 
+/**
+ * Decrypt a page row's token fields in place and return the same object.
+ * Single source for the "fetch a page, hand its caller usable tokens" pattern
+ * shared by getPage / getPageByWhatsAppPhoneNumberId. Callers that only need
+ * the Facebook token (getPageByFacebookId / getPageByInstagramId) decrypt just
+ * `accessToken` inline — that narrower decrypt is deliberate, not this helper.
+ */
+function decryptPageTokens<T extends { id: string; accessToken: string; whatsappAccessToken: string | null }>(page: T): T {
+    page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+    page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
+    return page;
+}
+
 export class PagesService {
     private logger: Logger = noopLogger;
     /**
@@ -606,10 +619,7 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         const page = result[0] || null;
-        if (page) {
-            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
-            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
-        }
+        if (page) decryptPageTokens(page);
         return page;
     }
 
@@ -1753,10 +1763,7 @@ export class PagesService {
             .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
 
         const page = result[0] || null;
-        if (page) {
-            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
-            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
-        }
+        if (page) decryptPageTokens(page);
         return page;
     }
 
