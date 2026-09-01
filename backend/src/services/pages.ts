@@ -1277,39 +1277,9 @@ export class PagesService {
         const returnedFbPageIds = new Set(fbPages.data.map(p => p.id));
         const revokedPages = await this.disableRevokedPages(existingPages, returnedFbPageIds, workspaceId, userId, logger);
 
-        // 3. Process Facebook pages in parallel (optimizes external API calls)
-        const processPromises = fbPages.data.map(async (fbPage) => {
-            logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
-
-            // Check linked Instagram account
-            let instagramAccountId: string | null = null;
-            let instagramUsername: string | null = null;
-            let instagramProfilePicUrl: string | null = null;
-
-            try {
-                const igAccount = await instagramService.getLinkedInstagramAccount(
-                    fbPage.id,
-                    pageLinkedInstagramCredential(fbPage.access_token)
-                );
-                if (igAccount) {
-                    instagramAccountId = igAccount.id;
-                    instagramUsername = igAccount.username;
-                    instagramProfilePicUrl = igAccount.profile_picture_url || null;
-                    logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
-                }
-            } catch {
-                logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
-            }
-
-            return {
-                fbPage,
-                instagramAccountId,
-                instagramUsername,
-                instagramProfilePicUrl
-            };
-        });
-
-        const results = await Promise.all(processPromises);
+        // 3. Enrich each Facebook page with its linked Instagram account, in
+        // parallel (independent external API calls, one per page).
+        const results = await this.enrichPagesWithInstagram(fbPages.data, logger);
 
         // 4. Determine how many more pages can be auto-enabled
         // The trial / channel claim belongs to the BILLING account (workspace owner
@@ -1718,6 +1688,42 @@ export class PagesService {
         }
 
         return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, takenPages, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+    }
+
+    /**
+     * Look up each Facebook page's linked Instagram account in parallel (one
+     * independent Graph call per page). A lookup failure is swallowed — the page
+     * simply syncs without an IG link. Returns each fbPage paired with its
+     * resolved IG identity (all null when unlinked or on error).
+     */
+    private async enrichPagesWithInstagram<F extends { id: string; name: string; access_token: string }>(
+        fbPages: F[],
+        logger: Logger,
+    ): Promise<Array<{ fbPage: F; instagramAccountId: string | null; instagramUsername: string | null; instagramProfilePicUrl: string | null }>> {
+        return Promise.all(fbPages.map(async (fbPage) => {
+            logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
+
+            let instagramAccountId: string | null = null;
+            let instagramUsername: string | null = null;
+            let instagramProfilePicUrl: string | null = null;
+
+            try {
+                const igAccount = await instagramService.getLinkedInstagramAccount(
+                    fbPage.id,
+                    pageLinkedInstagramCredential(fbPage.access_token)
+                );
+                if (igAccount) {
+                    instagramAccountId = igAccount.id;
+                    instagramUsername = igAccount.username;
+                    instagramProfilePicUrl = igAccount.profile_picture_url || null;
+                    logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
+                }
+            } catch {
+                logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
+            }
+
+            return { fbPage, instagramAccountId, instagramUsername, instagramProfilePicUrl };
+        }));
     }
 
     /**
