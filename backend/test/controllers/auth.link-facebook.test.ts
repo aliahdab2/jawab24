@@ -34,6 +34,9 @@ vi.mock('../../src/services/sms', () => ({ smsService: { send: vi.fn() } }));
 vi.mock('../../src/services/auth', () => ({
     authService: {
         linkFacebookToUser: vi.fn().mockResolvedValue(undefined),
+        // Exhaustive factory: the new collision guard calls this on every link, so a
+        // missing export would surface as a 500 on every path, not a mock error.
+        getUserByFacebookId: vi.fn().mockResolvedValue(null),
         getUserById: vi.fn().mockResolvedValue({
             id: 'user-1', facebookId: 'fb-123', name: 'Test', email: null,
             phone: '+966500000000', phoneVerified: true, picture: null,
@@ -109,6 +112,9 @@ describe('AuthController - linkFacebook', () => {
         vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([{ id: 'ws-1' }] as any);
         vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(undefined);
         vi.mocked(authService.linkFacebookToUser).mockResolvedValue(undefined);
+        // Default: the Facebook identity is unowned, so the collision guard is a no-op
+        // and the happy-path tests proceed. Collision cases override this per test.
+        vi.mocked(authService.getUserByFacebookId).mockResolvedValue(null);
         vi.mocked(authService.getUserById).mockResolvedValue({
             id: 'user-1', facebookId: 'fb-123', name: 'Test', email: null,
             phone: '+966500000000', phoneVerified: true, picture: null,
@@ -224,6 +230,45 @@ describe('AuthController - linkFacebook', () => {
             expect.objectContaining({ id: 'user-1' }),
             ACCESS_TOKEN_EXPIRY,
         );
+    });
+
+    /**
+     * Prod, Zid dev-store walkthrough 2026-08-31: a merchant whose Facebook identity
+     * already belonged to a DIFFERENT Jawab24 user (direct-FB signup vs a Zid embedded
+     * auto-provisioned account) connected a page. `users.facebook_id` is UNIQUE, so the
+     * link write threw a 23505 that surfaced as a generic 500 — the page sync never ran,
+     * 0 pages connected, and nothing signalled the cause. The guard detects it first.
+     */
+    describe('Facebook-identity collision', () => {
+        it('returns 409 FACEBOOK_ALREADY_LINKED and does NOT write the link or sync pages when the identity belongs to another user', async () => {
+            vi.mocked(authService.getUserByFacebookId).mockResolvedValue({ id: 'other-user-2' });
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(409);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'FACEBOOK_ALREADY_LINKED' }));
+            // Once a collision is detected, neither the link write nor the sync may run.
+            expect(authService.linkFacebookToUser).not.toHaveBeenCalled();
+            expect(pagesService.syncFromFacebook).not.toHaveBeenCalled();
+        });
+
+        it('proceeds to link when the identity is unowned (lookup returns null)', async () => {
+            vi.mocked(authService.getUserByFacebookId).mockResolvedValue(null);
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            expect(mockReply.status).not.toHaveBeenCalledWith(409);
+            expect(authService.linkFacebookToUser).toHaveBeenCalled();
+        });
+
+        it('proceeds to link when the identity already belongs to the SAME user (idempotent reconnect)', async () => {
+            vi.mocked(authService.getUserByFacebookId).mockResolvedValue({ id: 'user-1' });
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            expect(mockReply.status).not.toHaveBeenCalledWith(409);
+            expect(authService.linkFacebookToUser).toHaveBeenCalled();
+        });
     });
 
     /**

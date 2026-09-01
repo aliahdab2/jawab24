@@ -579,6 +579,23 @@ export class AuthService {
     }
 
     /**
+     * Return the id of the user who owns a Facebook id, or null. `users.facebook_id`
+     * carries a UNIQUE index (`users_facebook_id_key`), so this matches at most one
+     * row. The connect/link flow uses it to detect when a Facebook identity already
+     * belongs to a DIFFERENT Jawab24 account before attempting the unique-constrained
+     * link write (which would otherwise throw a 23505 and surface as an opaque 500).
+     *
+     * Selects ONLY the id on purpose: the caller needs ownership, not the row, and
+     * this user is not the session — pulling the full row would decrypt another
+     * user's Facebook token into memory (and mis-attribute a decryption failure to
+     * this request if that row is under a rotated key).
+     */
+    async getUserByFacebookId(facebookId: string): Promise<{ id: string } | null> {
+        const result = await db.select({ id: users.id }).from(users).where(eq(users.facebookId, facebookId));
+        return result[0] ?? null;
+    }
+
+    /**
      * Create auth response. Callers pass the server-resolved defaultWorkspaceId
      * (from `workspaceService.resolveDefaultWorkspaceId`) so the frontend can
      * land the user in the right workspace on login regardless of any stale
