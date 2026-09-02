@@ -45,4 +45,28 @@ describe('ChannelBadges', () => {
         const { container } = render(<ChannelBadges page={{}} labels={LABELS} />);
         expect(container.firstChild).toBeNull();
     });
+
+    it('a severed WhatsApp link keeps the badge colored and adds the amber dot', () => {
+        // Severed ≠ off: muting would read as deliberately disabled, when the
+        // merchant has it on and the link is broken at Meta (Z net, 2026-09-01).
+        render(
+            <ChannelBadges
+                page={{ whatsappConnected: true, whatsappAutoReplyEnabled: true, whatsappNeedsReconnect: true }}
+                labels={{ ...LABELS, whatsapp: 'WhatsApp: needs reconnecting' }}
+            />
+        );
+
+        expect(screen.getByLabelText('WhatsApp: needs reconnecting').className).not.toContain('text-icon-muted');
+        expect(screen.getByTestId('channel-reconnect-dot-whatsapp')).toBeInTheDocument();
+    });
+
+    it('a healthy WhatsApp channel renders no reconnect dot', () => {
+        render(
+            <ChannelBadges
+                page={{ whatsappConnected: true, whatsappAutoReplyEnabled: true }}
+                labels={LABELS}
+            />
+        );
+        expect(screen.queryByTestId('channel-reconnect-dot-whatsapp')).not.toBeInTheDocument();
+    });
 });

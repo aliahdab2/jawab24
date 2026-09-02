@@ -22,6 +22,7 @@ function page(overrides: Partial<CustomerPage> = {}): CustomerPage {
         whatsappAutoReplyEnabled: false,
         whatsappCoexistence: null,
         whatsappDisconnectReason: null,
+        whatsappNeedsReconnect: false,
         instagramAutoReplyEnabled: false,
         autoReplyEnabled: false,
         autoReplyDisabledReason: null,
@@ -93,5 +94,25 @@ describe('PageChannelStatus (admin page card)', () => {
         })} />);
 
         expect(screen.getByText(adminEn.customer.pageDisconnected)).toBeInTheDocument();
+    });
+
+    it('a severed WhatsApp link reads "needs reconnecting", never ON — the Z net shape', () => {
+        // Token valid, toggle on, link severed at Meta: this exact card showed a
+        // green "Auto-reply on" pill through a 27h webhook outage (2026-09-01).
+        render(<PageChannelStatus page={page({
+            whatsappPhoneNumberId: '1181482325054612',
+            whatsappConnected: true,
+            whatsappAutoReplyEnabled: true,
+            whatsappDisconnectReason: 'app_uninstalled',
+            whatsappNeedsReconnect: true,
+        })} />);
+
+        expect(screen.getByText(adminEn.customer.pageWhatsappReconnect)).toBeInTheDocument();
+        expect(screen.queryByText(adminEn.customer.pageReplyOn)).not.toBeInTheDocument();
+        // The badge stays colored (the toggle IS on) and carries the amber dot;
+        // its aria label — the accessible carrier — says needs reconnecting.
+        const waLabel = `${commentsEn.platformWhatsApp}: ${commonEn.needsReconnect}`;
+        expect(screen.getByLabelText(waLabel).className).not.toContain('text-icon-muted');
+        expect(screen.getByTestId('channel-reconnect-dot-whatsapp')).toBeInTheDocument();
     });
 });

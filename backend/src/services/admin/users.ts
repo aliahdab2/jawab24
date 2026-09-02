@@ -830,6 +830,12 @@ class AdminUsersService {
         const pagesWithReplyMode = pagesPayload.map(p => ({
             ...p,
             replyModeEffective: resolveEffectiveReplyMode(p.replyMode, workspaceReplyMode),
+            // Same derivation serializePage ships to the merchant dashboard: a
+            // recorded disconnect reason means the WhatsApp link is severed at
+            // Meta even though the token still validates. The console must not
+            // read token presence alone as "the channel works" — that badge said
+            // "All good" through the 27h Z net webhook outage (2026-09-01).
+            whatsappNeedsReconnect: !!p.whatsappDisconnectReason,
         }));
 
         // THE gate verdict, from the same predicate enforceAutoReplyGate blocks on.
@@ -903,6 +909,7 @@ class AdminUsersService {
                 instagramAutoReplyEnabled: p.instagramAutoReplyEnabled,
                 whatsappConnected: p.whatsappConnected,
                 whatsappAutoReplyEnabled: p.whatsappAutoReplyEnabled,
+                whatsappNeedsReconnect: p.whatsappNeedsReconnect,
                 replyMode: p.replyMode,
                 replyModeEffective: p.replyModeEffective,
                 // A page pin makes the workspace persona unreachable for this

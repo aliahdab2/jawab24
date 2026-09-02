@@ -143,6 +143,10 @@ export interface CustomerDetail {
         /** True = number also live on the merchant's WhatsApp Business app (Coexistence) */
         whatsappCoexistence: boolean | null;
         whatsappDisconnectReason: string | null;
+        /** Link severed at Meta while the token still validates — merchant must
+         *  re-run the connect flow. Derived server-side (`!!whatsappDisconnectReason`,
+         *  same rule serializePage ships to the merchant dashboard). */
+        whatsappNeedsReconnect: boolean;
         instagramAutoReplyEnabled: boolean | null;
         /** The FACEBOOK channel's toggle — false by definition on a card with no
          *  Facebook page. "Is this page replying?" is `isAnyChannelReplying`. */

@@ -27,6 +27,20 @@ describe('listPageChannels', () => {
     it('a WhatsApp number without a stored token is not a channel', () => {
         expect(listPageChannels({ whatsappConnected: false, whatsappAutoReplyEnabled: true })).toEqual([]);
     });
+
+    it('a severed WhatsApp link carries needsReconnect while the toggle stays visible', () => {
+        // The Z net shape (2026-09-01): token valid, toggle on, link severed at
+        // Meta — the channel must read "configured to reply but broken".
+        expect(listPageChannels({
+            whatsappConnected: true, whatsappAutoReplyEnabled: true, whatsappNeedsReconnect: true,
+        })).toEqual([{ platform: 'whatsapp', on: true, needsReconnect: true }]);
+    });
+
+    it('a healthy WhatsApp channel carries no needsReconnect key at all', () => {
+        expect(listPageChannels({
+            whatsappConnected: true, whatsappAutoReplyEnabled: true, whatsappNeedsReconnect: false,
+        })).toEqual([{ platform: 'whatsapp', on: true }]);
+    });
 });
 
 describe('isAnyChannelReplying', () => {
@@ -43,5 +57,18 @@ describe('isAnyChannelReplying', () => {
         // The regression: a false Facebook toggle on a card with no Facebook page.
         expect(isAnyChannelReplying({ autoReplyEnabled: true })).toBe(false);
         expect(isAnyChannelReplying({ facebookPageId: null, autoReplyEnabled: false, whatsappConnected: true, whatsappAutoReplyEnabled: true })).toBe(true);
+    });
+
+    it('a severed channel does not count as replying, even with its toggle on', () => {
+        // The Z net incident: WhatsApp-only card, toggle on, link severed at Meta
+        // — nothing was arriving while every surface said "replying".
+        expect(isAnyChannelReplying({
+            whatsappConnected: true, whatsappAutoReplyEnabled: true, whatsappNeedsReconnect: true,
+        })).toBe(false);
+        // Another healthy channel still counts.
+        expect(isAnyChannelReplying({
+            facebookPageId: 'fb-1', autoReplyEnabled: true,
+            whatsappConnected: true, whatsappAutoReplyEnabled: true, whatsappNeedsReconnect: true,
+        })).toBe(true);
     });
 });
