@@ -3,11 +3,13 @@ process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock';
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import CheckoutPage from '@/pages/checkout';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import paymentEn from '@/i18n/en/payment.json';
+import pricingEn from '@/i18n/en/pricing.json';
 
 // Mock modules
 vi.mock('next/router', () => ({ useRouter: vi.fn() }));
@@ -80,13 +82,26 @@ vi.mock('@/utils/geoCheck', async (importOriginal) => ({
 const mockApiPost = vi.fn();
 const mockApiGet = vi.fn();
 const mockPublicApiGet = vi.fn();
+const mockGetUsage = vi.fn();
 vi.mock('@/lib/api', () => ({
   api: {
     post: (...args: unknown[]) => mockApiPost(...args),
     get: (...args: unknown[]) => mockApiGet(...args),
   },
   publicApi: { get: (...args: unknown[]) => mockPublicApiGet(...args) },
+  subscriptionApi: { getUsage: (...args: unknown[]) => mockGetUsage(...args) },
 }));
+
+// The page reads the usage summary through react-query (useSubscriptionUsage),
+// so every render needs a QueryClient — same wrapper pattern as pages.test.tsx.
+const renderCheckout = () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  Wrapper.displayName = 'TestQueryWrapper';
+  return render(<CheckoutPage />, { wrapper: Wrapper });
+};
 
 describe('CheckoutPage', () => {
   let mockPush: ReturnType<typeof vi.fn>;
@@ -126,6 +141,10 @@ describe('CheckoutPage', () => {
       data: { data: mockPlan },
     });
 
+    // Default: no usage summary (fresh account) — WhatsApp marketability then
+    // rides on the env flag alone, which is unset in tests.
+    mockGetUsage.mockResolvedValue({ data: null });
+
     // Default: subscription intent creation succeeds
     mockApiPost.mockResolvedValue({
       data: { clientSecret: 'pi_test_123_secret', type: 'payment', subscriptionId: 'sub_test_123' },
@@ -145,7 +164,7 @@ describe('CheckoutPage', () => {
     // Geo check that never resolves
     mockGeoCheck.mockReturnValue(new Promise(() => {}));
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     // Should not show plan or error — just loading
     expect(screen.queryByTestId('embedded-checkout')).not.toBeInTheDocument();
@@ -155,7 +174,7 @@ describe('CheckoutPage', () => {
   it('should block sanctioned geos with PaymentsUnavailableNotice', async () => {
     mockGeoCheck.mockResolvedValue(true);
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -176,7 +195,7 @@ describe('CheckoutPage', () => {
       mockGeoCheck.mockResolvedValue(true);
       mockGeoCountry.mockReturnValue('SY');
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       expect(await screen.findByTestId('sham-cash-panel')).toBeInTheDocument();
       expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
@@ -192,7 +211,7 @@ describe('CheckoutPage', () => {
       let resolvePlan: (v: unknown) => void = () => {};
       mockPublicApiGet.mockReturnValue(new Promise((r) => { resolvePlan = r; }));
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       // Geo has answered, the plan has not: a spinner, not a notice that would
       // be swapped for the panel a moment later.
@@ -210,7 +229,7 @@ describe('CheckoutPage', () => {
       mockGeoCheck.mockResolvedValue(true);
       mockGeoCountry.mockReturnValue(undefined);
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       const link = await screen.findByRole('button', { name: paymentEn.shamCash.fromSyriaLink });
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -231,7 +250,7 @@ describe('CheckoutPage', () => {
       mockGeoCheck.mockResolvedValue(true);
       mockGeoCountry.mockReturnValue('SY');
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       expect(await screen.findByTestId('sanctions-notice')).toBeInTheDocument();
       await act(async () => {});
@@ -245,7 +264,7 @@ describe('CheckoutPage', () => {
       mockGeoCheck.mockResolvedValue(true);
       mockGeoCountry.mockReturnValue('SY');
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       expect(await screen.findByText('Log in to complete your subscription')).toBeInTheDocument();
       // The panel reads the merchant's own claims; mounting it here would 401
@@ -261,7 +280,7 @@ describe('CheckoutPage', () => {
   });
 
   it('should create subscription intent and render payment form', async () => {
-    const { container } = render(<CheckoutPage />);
+    const { container } = renderCheckout();
 
     // Wait for plan details to appear (means plan is loaded)
     await waitFor(() => {
@@ -287,7 +306,7 @@ describe('CheckoutPage', () => {
     mockGeoCheck.mockResolvedValue(false);
     mockPublicApiGet.mockRejectedValue(new Error('Network error'));
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load plan details. Please try again later.')).toBeInTheDocument();
@@ -300,7 +319,7 @@ describe('CheckoutPage', () => {
       data: { data: { ...mockPlan, price: 0 } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/dashboard');
@@ -308,7 +327,7 @@ describe('CheckoutPage', () => {
   });
 
   it('should display plan details when loaded', async () => {
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('$15')).toBeInTheDocument();
@@ -324,7 +343,7 @@ describe('CheckoutPage', () => {
       isAuthenticated: false,
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Log in to complete your subscription')).toBeInTheDocument();
@@ -343,7 +362,7 @@ describe('CheckoutPage', () => {
       isAuthenticated: false,
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Log In')).toBeInTheDocument();
@@ -362,7 +381,7 @@ describe('CheckoutPage', () => {
       response: { data: { code: 'SANCTIONED_GEO_BLOCK' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -374,7 +393,7 @@ describe('CheckoutPage', () => {
       response: { data: { code: 'EMAIL_REQUIRED' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
@@ -388,7 +407,7 @@ describe('CheckoutPage', () => {
       response: { data: { error: 'Card declined' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Card declined')).toBeInTheDocument();
@@ -405,7 +424,7 @@ describe('CheckoutPage', () => {
       response: { data: { code: 'DEMO_USER_STRIPE_BLOCKED' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(
@@ -423,7 +442,7 @@ describe('CheckoutPage', () => {
       response: { data: { error: 'Card declined' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Card declined')).toBeInTheDocument();
@@ -448,7 +467,7 @@ describe('CheckoutPage', () => {
       response: { data: { error: 'Card declined' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Card declined')).toBeInTheDocument();
@@ -473,7 +492,7 @@ describe('CheckoutPage', () => {
       data: { clientSecret: 'pi_test_123_secret', type: 'payment' },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     const retryButton = await screen.findByText('Try Again');
     expect(
@@ -497,7 +516,7 @@ describe('CheckoutPage', () => {
     mockApiPost.mockRejectedValueOnce({ response: { data: { error: 'Server error' } } });
     mockApiPost.mockResolvedValueOnce({ data: { clientSecret: 'pi_test_123_secret', type: 'payment' } });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     const retryButton = await screen.findByText('Try Again');
     expect(intentCallCount()).toBe(1);
@@ -515,7 +534,7 @@ describe('CheckoutPage', () => {
       response: { data: { error: true, message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMIT_EXCEEDED' } },
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Rate limit exceeded. Please try again later.')).toBeInTheDocument();
@@ -535,7 +554,7 @@ describe('CheckoutPage', () => {
   };
 
   it('creates the intent exactly once on success (no double-fire)', async () => {
-    const { container } = render(<CheckoutPage />);
+    const { container } = renderCheckout();
 
     await waitFor(() => {
       expect(container.querySelector('[data-testid="payment-element"]')).toBeTruthy();
@@ -548,7 +567,7 @@ describe('CheckoutPage', () => {
   it('blocks after exactly one attempt on backend SANCTIONED_GEO_BLOCK', async () => {
     mockApiPost.mockRejectedValue({ response: { data: { code: 'SANCTIONED_GEO_BLOCK' } } });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -560,7 +579,7 @@ describe('CheckoutPage', () => {
   it('blocks after exactly one attempt on backend GEO_VERIFICATION_REQUIRED', async () => {
     mockApiPost.mockRejectedValue({ response: { data: { code: 'GEO_VERIFICATION_REQUIRED' } } });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -572,7 +591,7 @@ describe('CheckoutPage', () => {
   it('redirects once and does not retry on EMAIL_REQUIRED', async () => {
     mockApiPost.mockRejectedValue({ response: { data: { code: 'EMAIL_REQUIRED' } } });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/complete-profile?redirect='));
@@ -585,7 +604,7 @@ describe('CheckoutPage', () => {
   it('should show loading state while session is being created', async () => {
     mockApiPost.mockImplementation(() => new Promise(() => {})); // never resolves
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     await waitFor(() => {
       expect(screen.getByText('Loading payment form...')).toBeInTheDocument();
@@ -621,7 +640,7 @@ describe('CheckoutPage', () => {
     });
 
     it('fetches the pack via the public config endpoint, creates a top-up intent, and renders the form', async () => {
-      const { container } = render(<CheckoutPage />);
+      const { container } = renderCheckout();
 
       // Pack summary (price from topup config). The price big number is split
       // into "$49" + ".00" spans, so match the integer part.
@@ -643,7 +662,7 @@ describe('CheckoutPage', () => {
     it('blocks sanctioned geos before any top-up call', async () => {
       mockGeoCheck.mockResolvedValue(true);
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       await waitFor(() => {
         expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -665,7 +684,7 @@ describe('CheckoutPage', () => {
         locale: 'en',
       });
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       // Summary shows the 10k pack price ($79), not the 5k price ($49).
       await waitFor(() => {
@@ -688,7 +707,7 @@ describe('CheckoutPage', () => {
         data: { data: { ...topupConfigResponse.data.data, enabled: false } },
       });
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       await waitFor(() => {
         expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
@@ -704,7 +723,7 @@ describe('CheckoutPage', () => {
       // endpoint makes the order summary + gate renderable while logged out.
       (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isAuthenticated: false });
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       await waitFor(() => {
         expect(screen.getByText('Log in to add replies')).toBeInTheDocument();
@@ -716,7 +735,7 @@ describe('CheckoutPage', () => {
     it('redirects to complete-profile (preserving the top-up) when EMAIL_REQUIRED', async () => {
       mockApiPost.mockRejectedValue({ response: { data: { code: 'EMAIL_REQUIRED' } } });
 
-      render(<CheckoutPage />);
+      renderCheckout();
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('topup%3D5k'));
@@ -732,12 +751,62 @@ describe('CheckoutPage', () => {
       pathname: '/checkout',
     });
 
-    render(<CheckoutPage />);
+    renderCheckout();
 
     // Let the geo check promise settle
     await act(async () => {});
 
     // Should not crash — plan fetch won't fire without planId
     expect(mockPublicApiGet).not.toHaveBeenCalled();
+  });
+
+  // ─── WhatsApp line in the order summary (D-117) ───────────
+  // Same posture as the /pricing/scale pin: marketable = env set AND canary
+  // off AND no marketplace block from the usage summary.
+  describe('WhatsApp line in the order summary', () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    const whatsappPlan = { ...mockPlan, whatsappEnabled: true };
+
+    it('listed once WhatsApp is publicly launched and the plan carries it', async () => {
+      vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+      vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+      mockPublicApiGet.mockResolvedValue({ data: { data: whatsappPlan } });
+
+      renderCheckout();
+
+      await screen.findByText('$15');
+      expect(screen.getByText(pricingEn.featureWhatsApp)).toBeInTheDocument();
+    });
+
+    it('absent while WhatsApp is dark (no env config)', async () => {
+      mockPublicApiGet.mockResolvedValue({ data: { data: whatsappPlan } });
+
+      renderCheckout();
+
+      await screen.findByText('$15');
+      expect(screen.queryByText(pricingEn.featureWhatsApp)).not.toBeInTheDocument();
+    });
+
+    it('absent for a Zid-connected account even after public launch (D-117)', async () => {
+      // Regression (2026-09-02, #1034): the summary gated on the bare global
+      // flag, so a Zid merchant — whose account can never use WhatsApp — was
+      // sold "WhatsApp Smart Replies" on checkout.
+      vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+      vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+      mockPublicApiGet.mockResolvedValue({ data: { data: whatsappPlan } });
+      mockGetUsage.mockResolvedValue({
+        data: { subscription: { whatsappUnavailable: { reason: 'zid_marketplace' } } },
+      });
+
+      renderCheckout();
+
+      await screen.findByText('$15');
+      // The row may flash while the usage summary is in flight; it must be
+      // gone once the marketplace block lands.
+      await waitFor(() =>
+        expect(screen.queryByText(pricingEn.featureWhatsApp)).not.toBeInTheDocument(),
+      );
+    });
   });
 });
