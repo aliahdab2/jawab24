@@ -52,19 +52,16 @@ export const ZID_BILLED_CODE: MarketplaceBilledCode = 'ZID_BILLED';
  * The Partner-Dashboard plan ids, which are what a subscription payload
  * identifies a plan by when it carries an id at all.
  *
- * Pricing (D-095 / D-103, website parity): 3740 «الأعمال» 146 SAR · 3741
- * «الاحترافي» 296 SAR ex-VAT, recurring monthly with a 14-day trial. The free
- * system plan 3956 «اختبار» cannot be deleted (Zid `cannot_delete_system_plan`);
- * it is absent here ON PURPOSE — an unmapped id fails loud rather than
- * activating someone on a guessed tier.
- *
- * ⚠️ D-120: «المبتدئ» (starter, 56 SAR ex-VAT) is sold on Zid but its Partner-
- * Dashboard plan id does not exist yet — the owner creates the plan in the
- * portal, and its id MUST be added here in the same breath. Until then the
- * Arabic-name fallback below carries the mapping, exactly the drift-tolerance
- * it exists for.
+ * Pricing (D-095 / D-103 / D-120, website parity): 4177 «المبتدئ» 56 SAR ·
+ * 3740 «الأعمال» 146 SAR · 3741 «الاحترافي» 296 SAR ex-VAT, recurring monthly
+ * with a 14-day trial. The free system plan 3956 «اختبار» cannot be deleted
+ * (Zid `cannot_delete_system_plan`) — nor edited: the partner dashboard
+ * rejects every save on it («Failed to add plan», proven 2026-09-02) — and it
+ * is absent here ON PURPOSE: an unmapped id fails loud rather than activating
+ * someone on a guessed tier.
  */
 const ZID_PLAN_ID_TO_SLUG: Record<string, ZidBillablePlanSlug> = {
+    '4177': 'starter',
     '3740': 'business',
     '3741': 'pro',
 };

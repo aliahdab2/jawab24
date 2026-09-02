@@ -747,12 +747,18 @@ describe('reconcileZidBilling', () => {
 
 describe('mapZidPlanToSlug — D-120 Starter joins the shelf', () => {
     /**
-     * The 56-SAR «المبتدئ» plan is sold on Zid but its Partner-Dashboard id does
-     * not exist until the owner creates the portal plan, so the Arabic-name
-     * fallback is the ONLY thing standing between a paying Starter merchant and
-     * fail-loud `unknown_plan`. Pin it — and pin that unknown identifiers still
-     * resolve to null (fail-loud), never to a guessed tier.
+     * The 56-SAR «المبتدئ» plan was created in the Partner Dashboard on
+     * 2026-09-02 as plan id 4177, so the id — what a subscription payload
+     * actually carries — is the primary mapping and the Arabic-name fallback
+     * is the drift tolerance behind it. Pin both — and pin that unknown
+     * identifiers still resolve to null (fail-loud), never to a guessed tier.
      */
+    it('resolves the Partner-Dashboard id 4177 to starter', async () => {
+        const { mapZidPlanToSlug } = await import('../../src/config/zidBilling');
+        expect(mapZidPlanToSlug({ id: '4177' })).toBe('starter');
+        expect(mapZidPlanToSlug({ id: 4177 })).toBe('starter');
+    });
+
     it('resolves «المبتدئ» (and the English name) to starter by name fallback', async () => {
         const { mapZidPlanToSlug } = await import('../../src/config/zidBilling');
         expect(mapZidPlanToSlug({ name: 'المبتدئ' })).toBe('starter');
