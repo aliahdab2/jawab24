@@ -1599,8 +1599,8 @@ export class PagesService {
         ig: InstagramLink,
         ctx: SyncContext,
     ): Promise<void> {
-        const { workspaceId, userId, billing, logger, outcome } = ctx;
-        const { instagramAccountId, instagramUsername, instagramProfilePicUrl } = ig;
+        const { workspaceId, billing, logger, outcome } = ctx;
+        const { instagramAccountId } = ig;
             // Check if this page exists in another workspace (transferred admin access)
             const globalResults = await db
                 .select()
