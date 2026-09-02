@@ -18,7 +18,7 @@
         "@sentry/node": "10.56.0",
         "bullmq": "^5.66.4",
         "dotenv": "^16.3.1",
-        "fastify": "5.8.5",
+        "fastify": "5.12.1",
         "ioredis": "^5.3.2",
         "openai": "6.27.0"
     },

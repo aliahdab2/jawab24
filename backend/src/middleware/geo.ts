@@ -61,7 +61,16 @@ export async function geoMiddleware(request: FastifyRequest, _reply: FastifyRepl
 
     // IP-based resolution via local GeoIP database. request.ip is the
     // X-Forwarded-For-resolved client IP because Fastify is configured with
-    // trustProxy: true and nginx sets X-Real-IP / X-Forwarded-For.
+    // trustProxy: true (index.ts).
+    //
+    // ⚠️ X-Forwarded-For ONLY — Fastify does NOT read X-Real-IP, so a request
+    // carrying just that header geolocates the PROXY, not the client (verified
+    // against a real instance 2026-09-02; the earlier "X-Real-IP / X-Forwarded-For"
+    // wording here read as though either would do). And `trustProxy: true` takes
+    // the LEFT-MOST entry of the chain, which is the caller-supplied end when
+    // nginx appends via $proxy_add_x_forwarded_for. Both behaviours are pinned by
+    // test/middleware/trustProxyClientIp.test.ts — this is the input to the
+    // Rule 4 sanctions gate, so it must not drift silently under a Fastify bump.
     const ip = request.ip;
     if (ip && ip !== '127.0.0.1' && ip !== '::1') {
         const geoipModule = await import('geoip-lite');
