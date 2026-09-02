@@ -115,4 +115,39 @@ describe('PageChannelStatus (admin page card)', () => {
         expect(screen.getByLabelText(waLabel).className).not.toContain('text-icon-muted');
         expect(screen.getByTestId('channel-reconnect-dot-whatsapp')).toBeInTheDocument();
     });
+
+    it('a stale reason on a card with no WhatsApp channel does NOT read "needs reconnecting"', () => {
+        // The SAME guard computeHealthFlags applies (whatsappConnected), pinned
+        // by the health suite's twin case: WhatsApp disconnected entirely (token
+        // cleared) with the reason column surviving. A red reconnect pill here
+        // would point support at a number the card no longer carries.
+        render(<PageChannelStatus page={page({
+            facebookPageId: 'fb-1',
+            autoReplyEnabled: true,
+            whatsappConnected: false,
+            whatsappDisconnectReason: 'app_uninstalled',
+            whatsappNeedsReconnect: true,
+        })} />);
+
+        expect(screen.queryByText(adminEn.customer.pageWhatsappReconnect)).not.toBeInTheDocument();
+        expect(screen.getByText(adminEn.customer.pageReplyOn)).toBeInTheDocument();
+        // No WhatsApp channel ⇒ no badge, no dot.
+        expect(screen.queryByTestId('channel-reconnect-dot-whatsapp')).not.toBeInTheDocument();
+    });
+
+    it('Disconnected outranks the severed-WhatsApp pill when both hold', () => {
+        // A dead primary credential is the bigger fault — the reconnect pill
+        // must not mask it. Pins the branch order, which is all that decides it.
+        render(<PageChannelStatus page={page({
+            facebookPageId: 'fb-1',
+            disconnected: true,
+            whatsappConnected: true,
+            whatsappAutoReplyEnabled: true,
+            whatsappDisconnectReason: 'app_uninstalled',
+            whatsappNeedsReconnect: true,
+        })} />);
+
+        expect(screen.getByText(adminEn.customer.pageDisconnected)).toBeInTheDocument();
+        expect(screen.queryByText(adminEn.customer.pageWhatsappReconnect)).not.toBeInTheDocument();
+    });
 });

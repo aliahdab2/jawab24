@@ -27,7 +27,11 @@ export function PageChannelStatus({ page }: { page: CustomerPage }) {
     // A severed WhatsApp link outranks "replying": the token still validates
     // and the toggle reads on, but no webhook arrives — the state that kept
     // this console saying "All good" through the 27h Z net outage (2026-09-01).
-    const waNeedsReconnect = !!page.whatsappNeedsReconnect;
+    // Guarded on `whatsappConnected`, the SAME guard computeHealthFlags applies:
+    // a card whose WhatsApp was disconnected entirely (token cleared) can keep a
+    // stale reason, and a red reconnect pill on a card with no WhatsApp channel
+    // — no badge, no dot — would send support hunting a number that isn't there.
+    const waNeedsReconnect = page.whatsappConnected && page.whatsappNeedsReconnect;
 
     return (
         <>
