@@ -38,6 +38,7 @@
   "inactive": "Off",
   "enabled": "On",
   "disabled": "Off",
+  "needsReconnect": "Needs reconnecting",
   "yes": "Yes",
   "no": "No",
   "view": "View",

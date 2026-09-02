@@ -30,8 +30,20 @@ export function ChannelBadges({
 
   return (
     <span className="inline-flex items-center gap-1 flex-shrink-0" role="group">
-      {channels.map(({ platform, on }) => (
-        <PlatformIcon key={platform} platform={platform} size="md" muted={!on} ariaLabel={labels[platform]} />
+      {channels.map(({ platform, on, needsReconnect }) => (
+        // A severed channel keeps its color (the toggle IS on) but carries an
+        // amber dot: "configured to reply, link broken". Muting it would read
+        // as deliberately off, which is the opposite of what support must see.
+        <span key={platform} className="relative inline-flex">
+          <PlatformIcon platform={platform} size="md" muted={!on} ariaLabel={labels[platform]} />
+          {needsReconnect && (
+            <span
+              data-testid={`channel-reconnect-dot-${platform}`}
+              className="absolute -top-0.5 -end-0.5 w-2 h-2 rounded-full bg-amber-500"
+              aria-hidden="true"
+            />
+          )}
+        </span>
       ))}
     </span>
   );

@@ -151,6 +151,13 @@ export interface HealthInputPage {
     whatsappConnected: boolean;
     whatsappAutoReplyEnabled: boolean | null;
     /**
+     * WhatsApp link severed at Meta while the token still validates
+     * (`!!pages.whatsapp_disconnect_reason`). REQUIRED for the same reason the
+     * identities above are: dropping it silently turns the one state where a
+     * "connected" channel receives nothing back into a green badge.
+     */
+    whatsappNeedsReconnect: boolean;
+    /**
      * The page's own persona pin (`pages.brand_voice_notes_multi`, D-084). Raw
      * jsonb — normalized here, not trusted, per the double-encoding precedent in
      * MULTI_LANG_SUPPORT_FIELDS below.
@@ -275,7 +282,7 @@ export const HEALTH_FLAG_KEYS = [
     'trial_expired', 'subscription_inactive', 'subscription_past_due_grace',
     'usage_over_cap', 'usage_near_cap',
     'usage_on_topup', 'usage_near_cap_on_topup', 'usage_topup_nearly_drained',
-    'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
+    'limit_fallback_off', 'page_disconnected', 'whatsapp_needs_reconnect', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
     'no_offering_chunks', 'kb_thin', 'kb_chunks_stale', 'unresolved_kb_gaps',
     'persona_placeholder', 'page_persona_override',
@@ -573,6 +580,14 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
         const scope = { pageId: p.id, pageName: p.name };
         if (p.disconnected) {
             add('red', 'page_disconnected', scope);
+        }
+        // Red, not yellow: a severed link means Meta delivers NOTHING to this
+        // channel while every credential check passes — replies are broken now,
+        // not at risk. `debug_token` cannot see it (the Z net outage ran 27h
+        // behind a passing token check), so this flag is the console's only
+        // carrier of the state.
+        if (p.whatsappConnected && p.whatsappNeedsReconnect) {
+            add('red', 'whatsapp_needs_reconnect', scope);
         }
         // "Off" = every CONNECTED channel is off. Keying on the Facebook column
         // alone flagged a WhatsApp-only card whose WhatsApp was answering every

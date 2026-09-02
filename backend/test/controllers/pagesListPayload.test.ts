@@ -198,4 +198,20 @@ describe('serializeListPage — GET /pages payload', () => {
             'whatsappNeedsReconnect',
         ]);
     });
+
+    it('derives whatsappNeedsReconnect from the reason column — the ONE shared rule', () => {
+        // Executes the REAL predicate (services/pages.ts whatsappNeedsReconnect):
+        // every controller suite stubs the module factory, so this is the unit
+        // suite that keeps the production one-liner itself honest. The severed
+        // state means "reason recorded, token kept" (Z net, 2026-09-01) — the
+        // value must track the reason, never token presence.
+        const severed = serializeListPage(makeRow({
+            whatsappAccessToken: 'wa-token',
+            whatsappDisconnectReason: 'app_uninstalled',
+        })) as Record<string, unknown>;
+        expect(severed.whatsappNeedsReconnect).toBe(true);
+
+        const healthy = serializeListPage(makeRow({ whatsappAccessToken: 'wa-token' })) as Record<string, unknown>;
+        expect(healthy.whatsappNeedsReconnect).toBe(false);
+    });
 });

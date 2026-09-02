@@ -24,13 +24,21 @@ export function PageChannelStatus({ page }: { page: CustomerPage }) {
     const t = useTranslations('admin');
     const labels = useChannelBadgeLabels(page);
     const replying = isAnyChannelReplying(page);
+    // A severed WhatsApp link outranks "replying": the token still validates
+    // and the toggle reads on, but no webhook arrives — the state that kept
+    // this console saying "All good" through the 27h Z net outage (2026-09-01).
+    // Guarded on `whatsappConnected`, the SAME guard computeHealthFlags applies:
+    // a card whose WhatsApp was disconnected entirely (token cleared) can keep a
+    // stale reason, and a red reconnect pill on a card with no WhatsApp channel
+    // — no badge, no dot — would send support hunting a number that isn't there.
+    const waNeedsReconnect = page.whatsappConnected && page.whatsappNeedsReconnect;
 
     return (
         <>
             <span
                 className={clsx(
                     'text-xs px-2 py-0.5 rounded-full border whitespace-nowrap',
-                    page.disconnected
+                    page.disconnected || waNeedsReconnect
                         ? 'status-error'
                         : replying
                             ? 'status-success'
@@ -39,12 +47,14 @@ export function PageChannelStatus({ page }: { page: CustomerPage }) {
             >
                 {page.disconnected
                     ? t('customer.pageDisconnected')
-                    : replying
-                        ? t('customer.pageReplyOn')
-                        : t(
-                            (page.autoReplyDisabledReason && PAGE_OFF_REASON_KEYS[page.autoReplyDisabledReason])
-                            || 'customer.pageReplyOff',
-                        )}
+                    : waNeedsReconnect
+                        ? t('customer.pageWhatsappReconnect')
+                        : replying
+                            ? t('customer.pageReplyOn')
+                            : t(
+                                (page.autoReplyDisabledReason && PAGE_OFF_REASON_KEYS[page.autoReplyDisabledReason])
+                                || 'customer.pageReplyOff',
+                            )}
             </span>
             <ChannelBadges page={page} labels={labels} />
         </>

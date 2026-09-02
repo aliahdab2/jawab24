@@ -40,6 +40,7 @@
   "inactive": "متوقف",
   "enabled": "مفعل",
   "disabled": "معطل",
+  "needsReconnect": "يلزم إعادة الربط",
   "yes": "نعم",
   "no": "لا",
   "view": "العرض",

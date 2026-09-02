@@ -78,6 +78,7 @@ function adminDetailFixture() {
             instagramUsername: null, instagramAccountId: 'ig-1', instagramAutoReplyEnabled: true,
             whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null, whatsappConnected: false,
             whatsappAutoReplyEnabled: false, whatsappCoexistence: false, whatsappDisconnectReason: null,
+            whatsappNeedsReconnect: false,
             autoReplyEnabled: true, autoReplyDisabledReason: null,
             disconnected: false, disconnectReason: null, archivedAt: null,
             kb: { kbLength: 2995, kbActiveVersion: 3, kbUpdatedAt: new Date('2026-08-12'), chunksTotal: 20, chunksByType: {}, unresolvedGaps: 3 },
@@ -180,6 +181,9 @@ describe('partnerPortalService.getMerchantDetail', () => {
                 instagramAutoReplyEnabled: true,
                 whatsappConnected: false,
                 whatsappAutoReplyEnabled: false,
+                // The severed-link state travels too, so the portal's "replying"
+                // verdict cannot drift from the admin console's (Z net, 2026-09-01).
+                whatsappNeedsReconnect: false,
             });
         });
 

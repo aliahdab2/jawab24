@@ -17,6 +17,10 @@ export function useChannelBadgeLabels(page: PageChannelInput): Record<keyof type
   return {
     facebook: `${tComments(PLATFORM_LABEL_KEYS.facebook)}: ${state(page.autoReplyEnabled)}`,
     instagram: `${tComments(PLATFORM_LABEL_KEYS.instagram)}: ${state(page.instagramAutoReplyEnabled)}`,
-    whatsapp: `${tComments(PLATFORM_LABEL_KEYS.whatsapp)}: ${state(page.whatsappAutoReplyEnabled)}`,
+    // A severed link outranks the toggle in the label: the badge's amber dot
+    // is aria-hidden, so this text is the only accessible carrier of the state.
+    whatsapp: `${tComments(PLATFORM_LABEL_KEYS.whatsapp)}: ${
+      page.whatsappNeedsReconnect ? tc('needsReconnect') : state(page.whatsappAutoReplyEnabled)
+    }`,
   };
 }

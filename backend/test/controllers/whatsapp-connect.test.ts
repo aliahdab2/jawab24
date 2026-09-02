@@ -13,6 +13,9 @@ vi.mock('../../src/services/pages', () => ({
         createWhatsAppOnlyPage: vi.fn(),
     },
     isPageDisconnected: vi.fn((page: { accessToken: string } | null) => !!page && page.accessToken === ''),
+    // Mirrors the prod one-liner (services/pages.ts) — serializePage calls it on
+    // every response, so a factory missing it turns every connect test 500.
+    whatsappNeedsReconnect: vi.fn((page: { whatsappDisconnectReason?: string | null }) => !!page?.whatsappDisconnectReason),
 }));
 
 vi.mock('../../src/services/whatsapp', () => ({

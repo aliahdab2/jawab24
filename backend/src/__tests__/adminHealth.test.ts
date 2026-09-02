@@ -109,6 +109,7 @@ function healthyPage(overrides: Partial<HealthInputPage> = {}): HealthInputPage 
         instagramAutoReplyEnabled: false,
         whatsappConnected: false,
         whatsappAutoReplyEnabled: false,
+        whatsappNeedsReconnect: false,
         ...overrides,
         // AFTER the spread: `kb` must be the MERGED summary, so a case may pass a
         // partial (`{ kb: { catalogItems: 0 } }`) and still get every other field
@@ -182,6 +183,33 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
     it('page_disconnected when the access token is cleared', () => {
         const flags = computeHealthFlags(healthyInput({ pages: [healthyPage({ disconnected: true })] }));
         expect(keys(flags)).toContain('page_disconnected');
+    });
+
+    it('whatsapp_needs_reconnect (red) when the link is severed with the token still valid', () => {
+        // The Z net shape (2026-09-01): WhatsApp-only card, toggle on, token
+        // passing debug_token — and no webhook arriving for 27h. The console
+        // must flag it red, scoped to the page.
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({
+                facebookPageId: null, autoReplyEnabled: false,
+                whatsappConnected: true, whatsappAutoReplyEnabled: true,
+                whatsappNeedsReconnect: true,
+            })],
+        }));
+        const f = flags.find(x => x.key === 'whatsapp_needs_reconnect');
+        expect(f?.severity).toBe('red');
+        expect(f?.pageId).toBe('page-1');
+        // The severed channel is not "off" — the off-flags must not also fire.
+        expect(keys(flags)).not.toContain('auto_reply_off_unknown');
+    });
+
+    it('no whatsapp_needs_reconnect when a stale reason survives with no WhatsApp channel', () => {
+        // A card whose WhatsApp was disconnected entirely (token cleared) keeps
+        // the reason column — that is the page_disconnected story, not this one.
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ whatsappConnected: false, whatsappNeedsReconnect: true })],
+        }));
+        expect(keys(flags)).not.toContain('whatsapp_needs_reconnect');
     });
 
     it('auto_reply_system_off (red) for a system reason, not user', () => {
