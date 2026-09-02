@@ -2249,6 +2249,24 @@ export function isPageDisconnected(page: {
 }
 
 /**
+ * "The WhatsApp link needs the merchant to re-run the connect flow" — driven by
+ * the REASON column, never by token absence. The health sweep and the
+ * account_update webhook deliberately KEEP the credential and only record a
+ * reason (whatsappTokenHealth.markWhatsAppNeedsReconnect), so no token check can
+ * see the state — the Z net outage ran 27h behind a passing debug_token
+ * (2026-09-01). Derived server-side so no UI ever learns the enum's values.
+ *
+ * The ONE rule behind every surface that shows the state: `serializePage` (the
+ * merchant dashboard banner + channel badges) and the admin customer detail
+ * (pill, badges, health input) all call this. Change it here, never inline — a
+ * second hand-written `!!reason` is below the duplication gate's floor, so
+ * drift between the merchant's card and the support console would go uncaught.
+ */
+export function whatsappNeedsReconnect(page: { whatsappDisconnectReason?: string | null }): boolean {
+    return !!page.whatsappDisconnectReason;
+}
+
+/**
  * Either the pooled `db` handle or a transaction handle from `db.transaction`.
  * Lets a caller run a helper inside its own transaction (see the reclaim path).
  */

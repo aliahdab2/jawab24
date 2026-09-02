@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { pagesService, isPageDisconnected } from '../services/pages';
+import { pagesService, isPageDisconnected, whatsappNeedsReconnect } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
@@ -65,12 +65,11 @@ export function serializePage<T extends {
         instagramDirect,
         instagramDirectConnected,
         whatsappConnected,
-        // "The token needs attention" — driven by the REASON, not by the absence of a
-        // token. The health sweep deliberately keeps the credential and only flags
-        // (see whatsappTokenHealth.markWhatsAppNeedsReconnect), so gating this on
-        // `!whatsappConnected` would have hidden the banner in exactly the state it
-        // exists for. Derived here so the UI never learns the enum's values.
-        whatsappNeedsReconnect: !!page.whatsappDisconnectReason,
+        // "The token needs attention" — the shared predicate carries the rule
+        // (reason-driven, never token absence) and its rationale; the admin
+        // customer detail derives from the same function, so the merchant's
+        // banner and the support console cannot drift.
+        whatsappNeedsReconnect: whatsappNeedsReconnect(page),
     };
 }
 

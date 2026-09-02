@@ -10,6 +10,7 @@ import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'driz
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
 import { computeHealthFlags, computeNonDefaultKeys, hasBusinessInfoContent, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
 import { subscriptionsService, resolveEntitlementEnd } from '../subscriptions';
+import { whatsappNeedsReconnect } from '../pages';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { createHash } from 'crypto';
 import { emailService } from '../email';
@@ -830,12 +831,12 @@ class AdminUsersService {
         const pagesWithReplyMode = pagesPayload.map(p => ({
             ...p,
             replyModeEffective: resolveEffectiveReplyMode(p.replyMode, workspaceReplyMode),
-            // Same derivation serializePage ships to the merchant dashboard: a
+            // The SAME predicate serializePage ships to the merchant dashboard: a
             // recorded disconnect reason means the WhatsApp link is severed at
             // Meta even though the token still validates. The console must not
             // read token presence alone as "the channel works" — that badge said
             // "All good" through the 27h Z net webhook outage (2026-09-01).
-            whatsappNeedsReconnect: !!p.whatsappDisconnectReason,
+            whatsappNeedsReconnect: whatsappNeedsReconnect(p),
         }));
 
         // THE gate verdict, from the same predicate enforceAutoReplyGate blocks on.

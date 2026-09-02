@@ -16,6 +16,9 @@ vi.mock('../../src/services/pages', () => ({
         syncFromFacebook: vi.fn(),
     },
     isPageDisconnected: vi.fn((page: any) => !!page && page.accessToken === ''),
+    // Mirrors the prod one-liner (services/pages.ts) — serializePage calls it on
+    // every response, so a factory missing it turns every controller test 500.
+    whatsappNeedsReconnect: vi.fn((page: any) => !!page?.whatsappDisconnectReason),
 }));
 
 // Persona save path (D-084): the controller reuses the workspace persona's
