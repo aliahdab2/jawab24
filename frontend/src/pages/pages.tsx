@@ -57,6 +57,656 @@ import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPageAvatarUrl, getPageChannelUrls } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 
+// Everything PageCard needs from PagesPage — one bundle instead of a ~30-prop
+// signature. Destructured to the same local names the JSX has always used.
+interface PageCardCtx {
+  t: ReturnType<typeof useTranslations>;
+  tc: ReturnType<typeof useTranslations>;
+  tInt: ReturnType<typeof useTranslations>;
+  tDash: ReturnType<typeof useTranslations>;
+  tTest: ReturnType<typeof useTranslations>;
+  canEdit: boolean;
+  isOwner: boolean;
+  syncing: boolean;
+  imgError: Record<string, boolean>;
+  setImgError: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  connectingWhatsApp: string | null;
+  whatsappVisible: boolean;
+  whatsappPlanIncluded: boolean | undefined;
+  whatsappEntitled: boolean | undefined;
+  whatsappConnectable: ReturnType<typeof isWhatsAppConnectable>;
+  handoffPauseMinutes: ReturnType<typeof useHandoffPauseDuration>;
+  handleToggle: (pageId: string, enabled: boolean) => void;
+  handleInstagramToggle: (pageId: string, enabled: boolean) => void;
+  handleWhatsAppToggle: (pageId: string, enabled: boolean) => void;
+  requestConnectWhatsApp: (pageId: string | null) => Promise<void>;
+  startInstagramConnect: () => Promise<void>;
+  openKbEditorFor: (target: Page | undefined) => void;
+  setShowReconnectDialog: React.Dispatch<React.SetStateAction<boolean>>;
+  setTestSmartReplyPage: React.Dispatch<React.SetStateAction<Page | null>>;
+  setTestReplyPrefillSample: React.Dispatch<React.SetStateAction<boolean>>;
+  setArchiveCandidate: React.Dispatch<React.SetStateAction<Page | null>>;
+  setDisconnectWhatsAppPage: React.Dispatch<React.SetStateAction<Page | null>>;
+  setRemoveWhatsAppOnlyPage: React.Dispatch<React.SetStateAction<Page | null>>;
+  setRemoveInstagramOnlyPage: React.Dispatch<React.SetStateAction<Page | null>>;
+  formatTime: (epochMs: number) => string;
+  formatDate: (dateStr: string | null) => string;
+}
+
+interface PageCardProps {
+  page: Page;
+  index: number;
+  dimmed: boolean;
+  ctx: PageCardCtx;
+}
+
+// The per-page card — extracted verbatim from the section renderer in
+// PagesPage. All page-level state and handlers arrive via `ctx` (one bundle
+// instead of a ~30-prop signature); `index` drives the staggered entrance
+// animation and is assigned by the caller so numbering runs across sections.
+function PageCard({ page, index, dimmed, ctx }: PageCardProps) {
+  const {
+    t, tc, tInt, tDash, tTest,
+    canEdit, isOwner, syncing,
+    imgError, setImgError,
+    connectingWhatsApp, whatsappVisible, whatsappPlanIncluded, whatsappEntitled, whatsappConnectable,
+    handoffPauseMinutes,
+    handleToggle, handleInstagramToggle, handleWhatsAppToggle,
+    requestConnectWhatsApp, startInstagramConnect, openKbEditorFor,
+    setShowReconnectDialog, setTestSmartReplyPage, setTestReplyPrefillSample,
+    setArchiveCandidate, setDisconnectWhatsAppPage,
+    setRemoveWhatsAppOnlyPage, setRemoveInstagramOnlyPage,
+    formatTime, formatDate,
+  } = ctx;
+                      const i = index;
+                      // Whether this page has merchant-provided Business Info.
+                      // MUST go through isKbFilled: the list payload carries the
+                      // server-computed `kbFilled` boolean and no longer carries
+                      // the text itself (#806, 2026-08-18).
+                      const kbFilled = isKbFilled(page);
+                      // Pageless cards: a pages row with no Facebook page behind it.
+                      // WHICH direct channel owns the card decides its identity —
+                      // an Instagram-direct card rendered as a WhatsApp one hid the
+                      // only toggle that governs its channel (PR #772 review H3).
+                      // Keyed on the IDENTITY flag, never the liveness one: for a
+                      // pageless IG row `instagramDirectConnected` and `isConnected`
+                      // flip false TOGETHER when the sweep clears a dead credential,
+                      // so a liveness-keyed identity re-renders the dead card as a
+                      // WhatsApp one and hides the reconnect banner in exactly the
+                      // state it exists for (PR #772 re-review, High).
+                      const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
+                      const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
+                      // External profile links, one per connected channel — same
+                      // resolver the admin console and reseller portal use. An
+                      // Instagram-direct or WhatsApp-only page used to get no link.
+                      const channelUrls = getPageChannelUrls(page);
+                      return (
+                        <Card
+                          id={`page-${page.id}`}
+                          hover
+                          className={clsx(
+                            'animate-slide-up border-none shadow-2xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1',
+                            dimmed && 'opacity-75 hover:opacity-100'
+                          )}
+                          style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
+                        >
+              {/* Header with gradient background */}
+              <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
+                {/* Page avatar */}
+                <div className={clsx(
+                  'w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden flex items-center justify-center',
+                  isInstagramOnly ? 'bg-gradient-to-br from-purple-500 to-pink-500'
+                    : isWhatsAppOnly ? 'bg-[#25D366]' : 'bg-brand-600'
+                )}>
+                  {getPageAvatarUrl(page) && !imgError[page.id] ? (
+                    <img
+                      src={getPageAvatarUrl(page)!}
+                      alt={page.name}
+                      className="w-full h-full object-cover"
+                      onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
+                    />
+                  ) : isInstagramOnly ? (
+                    <Instagram className="w-7 h-7 text-white" aria-hidden="true" />
+                  ) : isWhatsAppOnly ? (
+                    <WhatsAppIcon className="w-7 h-7 text-white" aria-hidden="true" />
+                  ) : (
+                    <FileText className="w-7 h-7 text-white" />
+                  )}
+                </div>
+
+                {/* Page info */}
+                <div className="min-w-0 flex-1 text-start">
+                  <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
+                  {/* No "Add info" chip here. A page missing its Business Info
+                      already says so twice below — the amber nudge banner (with
+                      the reason and an "Add now" button) and the Business Info
+                      CTA — and all three opened the same editor. One alert plus
+                      one persistent entry point; the chip was the third. */}
+                </div>
+
+                {/* External links — one per connected channel (Facebook / Instagram /
+                    WhatsApp), same as the admin console and reseller portal. */}
+                {(channelUrls.facebook || channelUrls.instagram || channelUrls.whatsapp) && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {channelUrls.facebook && (
+                      <a
+                        href={channelUrls.facebook}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#1877F2] transition-colors"
+                        aria-label={`${tc('openOn')} Facebook`}
+                      >
+                        <Facebook className="w-4 h-4" />
+                      </a>
+                    )}
+                    {channelUrls.instagram && (
+                      <a
+                        href={channelUrls.instagram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#E4405F] transition-colors"
+                        aria-label={`${tc('openOn')} Instagram`}
+                      >
+                        <Instagram className="w-4 h-4" />
+                      </a>
+                    )}
+                    {channelUrls.whatsapp && (
+                      <a
+                        href={channelUrls.whatsapp}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#128C7E] transition-colors"
+                        aria-label={`${tc('openOn')} WhatsApp`}
+                      >
+                        <WhatsAppIcon className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page).
+                  `strong` shows the honest "can only route to contact until you add info" copy —
+                  rolled out to ALL merchants (2026-07-14, D-025), previously a founder-only canary. */}
+              {needsBusinessInfo(page) && (
+                <BusinessInfoNudgeBanner onAdd={() => openKbEditorFor(page)} strong />
+              )}
+
+              {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
+                  card has no Facebook credential to reconnect */}
+              {page.isConnected === false && !!page.facebookPageId && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('reconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('reconnectDescription')}</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowReconnectDialog(true)}
+                    disabled={syncing}
+                    className="w-full"
+                    icon={<LinkIcon className="w-3.5 h-3.5" />}
+                  >
+                    {t('reconnect')}
+                  </Button>
+                  {/* Secondary, deliberately quiet: most disconnections are accidents
+                      where reconnecting is the right answer. Archiving lives here (not
+                      in the card body below) because that body is pointer-events-none
+                      while disconnected. Hidden when WhatsApp is still live on this
+                      card — hiding it would bury a working channel — and for members,
+                      who would only get a 403 from the admin-scoped route. */}
+                  {canEdit && !page.whatsappConnected && (
+                    <button
+                      type="button"
+                      onClick={() => setArchiveCandidate(page)}
+                      className="self-center text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      {t('archiveAction')}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Instagram-direct reconnect banner — the M1 sweep clears the stored
+                  credential when Meta pronounces it dead (Graph 190), which flips
+                  isConnected false on this card. There is no Facebook to reconnect
+                  through: the fix is re-running the same Instagram Login connect,
+                  which updates the SAME row (connectInstagramDirect reconnect path). */}
+              {isInstagramOnly && page.isConnected === false && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('instagramReconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('instagramReconnectDescription')}</p>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      onClick={() => void startInstagramConnect()}
+                      className="w-full"
+                      icon={<LinkIcon className="w-3.5 h-3.5" />}
+                    >
+                      {t('reconnect')}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* WhatsApp reconnect banner — a SEPARATE banner from the Facebook one
+                  above, because the two channels fail independently: a page can have a
+                  healthy Facebook token and a dead WhatsApp one (Meta forces a 60-day
+                  expiry on WhatsApp business tokens), and a WhatsApp-only card has no
+                  Facebook credential at all so the banner above never fires for it.
+                  The connect action is the same Embedded Signup popup as a first-time
+                  connect — re-running it mints a fresh token. */}
+              {page.whatsappNeedsReconnect && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('whatsappReconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('whatsappReconnectDescription')}</p>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      onClick={() => requestConnectWhatsApp(page.id)}
+                      disabled={connectingWhatsApp === page.id}
+                      className="w-full"
+                      icon={<LinkIcon className="w-3.5 h-3.5" />}
+                    >
+                      {t('whatsappConnectButton')}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Full-card lock only when nothing on the card still works: a page
+                  whose FB token died but whose WhatsApp is connected keeps replying
+                  on WhatsApp, so only the FB/IG rows get locked (below). */}
+              <div className={clsx('p-4 sm:p-6 flex-1 flex flex-col gap-6', page.isConnected === false && !page.whatsappConnected && 'opacity-60 pointer-events-none')}>
+                {/* Platform Toggles */}
+                <div className="flex flex-col gap-3">
+                  {/* Facebook + Instagram rows — hidden on a WhatsApp-only card */}
+                  {!isWhatsAppOnly && (<div className={clsx('flex flex-col gap-3', page.isConnected === false && 'opacity-60 pointer-events-none')}>
+                  {/* Facebook row — meaningless on an Instagram-only card (there is no
+                      Messenger to answer), and its toggle would be the same dead
+                      affordance the hidden Instagram row used to be. */}
+                  {!isInstagramOnly && (
+                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'icon-bg-blue' : 'bg-surface-200 text-icon-muted'}`}>
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900 dark:text-blue-300' : 'text-muted-foreground'}`}>Facebook</p>
+                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500 dark:text-blue-400' : 'text-muted-foreground'}`}>
+                          {page.autoReplyEnabled ? tc('enabled') : tc('disabled')}
+                        </p>
+                      </div>
+                    </div>
+                    <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                      <Toggle
+                        enabled={page.autoReplyEnabled ?? false}
+                        onChange={(enabled) => handleToggle(page.id, enabled)}
+                        disabled={!canEdit}
+                        aria-label={`${t('autoReply')} Facebook - ${page.name}`}
+                      />
+                    </span>
+                  </div>
+                  )}
+
+                  {/* Instagram row */}
+                  <div
+                    className={clsx(
+                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
+                      page.instagramUsername
+                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800' : 'bg-background border-theme-border')
+                        : 'bg-background border-theme-border border-dashed'
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={clsx(
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                        page.instagramUsername
+                          ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
+                          : 'bg-surface-100 text-icon-muted'
+                      )}>
+                        <Instagram className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={clsx(
+                          'text-sm font-bold',
+                          page.instagramUsername
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900 dark:text-pink-300' : 'text-muted-foreground')
+                            : 'text-muted-foreground'
+                        )}>{t('platformInstagram')}</p>
+                        <div className="flex items-center gap-1">
+                          <p className={clsx(
+                            'text-xs font-medium',
+                            page.instagramUsername
+                              ? (page.instagramAutoReplyEnabled ? 'text-pink-500 dark:text-pink-400' : 'text-muted-foreground')
+                              : 'text-muted-foreground'
+                          )}>
+                            {page.instagramUsername
+                              ? `@${page.instagramUsername}`
+                              : t('instagramNotConnected')}
+                          </p>
+                          {!page.instagramUsername && (
+                            <InfoPopover label={t('instagramTooltip')}>
+                              <span className="block">{t('instagramTooltip')}</span>
+                            </InfoPopover>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {page.instagramUsername && (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isInstagramOnly && isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => setRemoveInstagramOnlyPage(page)}
+                            className={clsx(
+                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
+                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
+                              // Same expanded hit area as the WhatsApp Unlink button —
+                              // destructive control beside a toggle.
+                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
+                            )}
+                            aria-label={`${t('instagramOnlyRemoveTitle')} - ${page.name}`}
+                            title={t('instagramOnlyRemoveTitle')}
+                          >
+                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
+                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                          <Toggle
+                            enabled={page.instagramAutoReplyEnabled ?? false}
+                            onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                            disabled={!canEdit}
+                            aria-label={`${t('autoReply')} Instagram - ${page.name}`}
+                          />
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  </div>)}
+
+                  {/* WhatsApp row — master-switch gated so a dark deploy shows
+                      no WhatsApp surface; the whatsappConnected OR never hides
+                      an already-connected number. */}
+                  {!isInstagramOnly && ((whatsappVisible && whatsappConnectable !== false) || page.whatsappConnected) && (
+                  <div
+                    className={clsx(
+                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
+                      page.whatsappConnected
+                        ? (page.whatsappAutoReplyEnabled ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-background border-theme-border')
+                        : 'bg-background border-theme-border border-dashed'
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={clsx(
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                        page.whatsappConnected
+                          ? (page.whatsappAutoReplyEnabled ? 'bg-[#25D366] text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
+                          : 'bg-surface-100 text-icon-muted'
+                      )}>
+                        <WhatsAppIcon className="w-4 h-4" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0">
+                        {/* Beta chip sets expectations on the newest channel — it is a
+                            deliberate promise-less label, not a gate. Keep it until
+                            WhatsApp has bedded in (see WHATSAPP_LAUNCH_RUNBOOK). */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={clsx(
+                            'text-sm font-bold',
+                            page.whatsappConnected && page.whatsappAutoReplyEnabled
+                              ? 'text-emerald-900 dark:text-emerald-300'
+                              : 'text-muted-foreground'
+                          )}>{t('platformWhatsApp')}</p>
+                          <Badge variant="warning" size="xs">{t('whatsappBeta')}</Badge>
+                        </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          {/* dir=ltr keeps the +NNN phone number readable in RTL.
+                              A phone number must never wrap: "+1 555-396-9839"
+                              broke across two lines on a narrow Arabic card and
+                              read as two different numbers (reported 2026-07-31).
+                              nowrap + truncate degrades to an ellipsis instead,
+                              tabular-nums keeps the digits from jittering. */}
+                          <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined}
+                            title={page.whatsappDisplayPhoneNumber ?? undefined}
+                            className={clsx(
+                            'text-xs font-medium whitespace-nowrap truncate tabular-nums text-start',
+                            page.whatsappConnected && page.whatsappAutoReplyEnabled
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-muted-foreground'
+                          )}>
+                            {page.whatsappConnected
+                              ? (page.whatsappDisplayPhoneNumber || t('platformWhatsApp'))
+                              : t('whatsappNotConnected')}
+                          </p>
+                          {!page.whatsappConnected && (
+                            <InfoPopover label={t('whatsappTooltip')}>
+                              <span className="block">{t('whatsappTooltip')}</span>
+                            </InfoPopover>
+                          )}
+                          {page.whatsappConnected && page.whatsappCoexistence === true && (
+                            <InfoPopover label={t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}>
+                              <span className="block">{t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}</span>
+                            </InfoPopover>
+                          )}
+                        </div>
+                        {/* Coexistence: the number is ALSO live on the merchant's WhatsApp
+                            Business app, whose own greeting/away automations would answer
+                            every customer a second time (D-109). Every Coexistence vendor
+                            tells merchants to switch those off — so do we, where the
+                            number lives. */}
+                        {page.whatsappConnected && page.whatsappCoexistence === true && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {t('whatsappCoexistenceHint')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {page.whatsappConnected ? (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => (isWhatsAppOnly ? setRemoveWhatsAppOnlyPage(page) : setDisconnectWhatsAppPage(page))}
+                            className={clsx(
+                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
+                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
+                              // 28px is well under the 44px touch minimum, and this
+                              // is a DESTRUCTIVE control sitting next to the toggle —
+                              // a mis-tap disconnects the number. Expand the hit area
+                              // without moving anything, same technique as Toggle.tsx.
+                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
+                            )}
+                            aria-label={`${t('whatsappDisconnect')} - ${page.name}`}
+                            title={t('whatsappDisconnect')}
+                          >
+                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
+                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                          <Toggle
+                            enabled={page.whatsappAutoReplyEnabled ?? false}
+                            onChange={(enabled) => handleWhatsAppToggle(page.id, enabled)}
+                            disabled={!canEdit}
+                            aria-label={`${t('autoReply')} WhatsApp - ${page.name}`}
+                          />
+                        </span>
+                      </div>
+                    ) : (isOwner && whatsappVisible && (
+                      whatsappEntitled === true ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => requestConnectWhatsApp(page.id)}
+                          disabled={connectingWhatsApp === page.id}
+                        >
+                          {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
+                        </Button>
+                      ) : whatsappEntitled === false ? (
+                        // Refused: route to pricing instead of the Meta signup.
+                        // UpgradeCTA renders nothing on iOS native. The label
+                        // names the action that actually unblocks them — a lapsed
+                        // account is already ON a WhatsApp plan, so "upgrade"
+                        // would be advice it cannot act on.
+                        <UpgradeCTA className="flex-shrink-0">
+                          <Button size="sm" variant="secondary">
+                            {t(whatsappPlanIncluded === true ? 'whatsappRenewButton' : 'whatsappUpgradeButton')}
+                          </Button>
+                        </UpgradeCTA>
+                      ) : null // entitlement still loading
+                    ))}
+                  </div>
+                  )}
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-background border border-theme-border">
+                  <div className="py-3 text-center">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('totalIncoming')}</p>
+                    <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="py-3 text-center border-x border-theme-border">
+                    <div className="flex items-center justify-center gap-1 mb-1.5">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('repliesSent')}</p>
+                      <RepliesBreakdownTooltip page={page} />
+                    </div>
+                    <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="py-3 text-center">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('replyRate')}</p>
+                    <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
+                  </div>
+                </div>
+
+                {/* E-commerce Connected Badge — hidden on mobile when no store, invisible on desktop to keep card heights equal.
+                    Named from the server-resolved platform: the badge used to hardcode "Shopify" and
+                    told every Salla/Zid merchant they were on the wrong platform (found 2026-08-23). */}
+                <div
+                  className={clsx(
+                    'w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 shadow-md bg-gradient-to-br',
+                    page.ecommerceStorePlatform === 'shopify'
+                      ? 'from-[#96BF48] to-[#5A8A1F]'
+                      : 'from-brand-500 to-brand-700',
+                    page.ecommerceStoreId ? 'visible' : 'hidden lg:flex lg:invisible',
+                  )}
+                  aria-hidden={!page.ecommerceStoreId}
+                >
+                  <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
+                  <span className="text-white text-[12px] font-semibold">
+                    {page.ecommerceStorePlatform
+                      ? t('storeConnectedBadge', { platform: tInt(`platformPicker.${page.ecommerceStorePlatform}`) })
+                      : ''}
+                  </span>
+                </div>
+
+                {/* Business Info CTA — the card's persistent entry point, and the
+                    only place the FILLED state is shown ("Edit Business Info").
+                    Reads isKbFilled, NOT page.knowledgeBase: the list endpoint
+                    (GET /pages?view=list) stopped shipping the text on 2026-08-18
+                    (#806) and sends a server-computed `kbFilled` instead, so the
+                    raw read was falsy for EVERY page and this CTA was stuck in its
+                    empty state even for merchants whose info was complete. */}
+                <button
+                  onClick={() => openKbEditorFor(page)}
+                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${kbFilled
+                    ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
+                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
+                    }`}
+                >
+                  <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${kbFilled ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div className="text-start">
+                        {/* A member opens the same editor read-only, so the CTA
+                            must not promise a write: «أضف معلومات» and «اضغط
+                            للتعديل» are both instructions they cannot follow. */}
+                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-400' : 'text-foreground/70'}`}>
+                          {!canEdit
+                            ? t('viewBusinessInfo')
+                            : kbFilled
+                              ? t('businessInfoActive')
+                              : t('addBusinessInfo')
+                          }
+                        </p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
+                          {!canEdit
+                            ? tc('viewOnlyHint')
+                            : kbFilled
+                              ? t('clickToEdit')
+                              : t('improveAIQuality')
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className={`w-5 h-5 transition-transform ${kbFilled ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
+                  </div>
+                </button>
+              </div>
+
+              {/* Test Smart Reply */}
+              <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
+                <button
+                  onClick={() => { setTestReplyPrefillSample(false); setTestSmartReplyPage(page); }}
+                  className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
+                        <FlaskConical className="w-5 h-5" />
+                      </div>
+                      <div className="text-start">
+                        <p className="text-sm font-bold text-foreground/70">{tTest('title')}</p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{tTest('description')}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Status Footer */}
+              <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={clsx(
+                    'w-2 h-2 rounded-full',
+                    page.isConnected === false
+                      ? 'bg-amber-500'
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
+                  )}></div>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    {page.isConnected === false
+                      ? t('disconnected')
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled) ? tc('active') : tc('inactive')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span
+                    className="text-xs font-bold uppercase tracking-tighter"
+                    title={page.lastActivity ? t('lastActivity') : ''}
+                  >
+                    {page.lastActivity ? formatTime(page.lastActivity) : formatDate(page.createdAt as unknown as string)}
+                  </span>
+                </div>
+              </div>
+            </Card>
+                      );
+}
+
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');
   const tc = useTranslations('common');
@@ -1138,6 +1788,21 @@ const PagesPage: NextPageWithLayout = () => {
 
   const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t, tc('noData'));
 
+  // Bundled context handed to every PageCard (see PageCardCtx above).
+  const cardCtx: PageCardCtx = {
+    t, tc, tInt, tDash, tTest,
+    canEdit, isOwner, syncing,
+    imgError, setImgError,
+    connectingWhatsApp, whatsappVisible, whatsappPlanIncluded, whatsappEntitled, whatsappConnectable,
+    handoffPauseMinutes,
+    handleToggle, handleInstagramToggle, handleWhatsAppToggle,
+    requestConnectWhatsApp, startInstagramConnect, openKbEditorFor,
+    setShowReconnectDialog, setTestSmartReplyPage, setTestReplyPrefillSample,
+    setArchiveCandidate, setDisconnectWhatsAppPage,
+    setRemoveWhatsAppOnlyPage, setRemoveInstagramOnlyPage,
+    formatTime, formatDate,
+  };
+
   if (loading && pages.length === 0) {
     return <PageSkeleton type="grid" />;
   }
@@ -1201,596 +1866,9 @@ const PagesPage: NextPageWithLayout = () => {
                     </div>
                   )}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {sectionPages.map((page) => {
-                      const i = globalIndex++;
-                      // Whether this page has merchant-provided Business Info.
-                      // MUST go through isKbFilled: the list payload carries the
-                      // server-computed `kbFilled` boolean and no longer carries
-                      // the text itself (#806, 2026-08-18).
-                      const kbFilled = isKbFilled(page);
-                      // Pageless cards: a pages row with no Facebook page behind it.
-                      // WHICH direct channel owns the card decides its identity —
-                      // an Instagram-direct card rendered as a WhatsApp one hid the
-                      // only toggle that governs its channel (PR #772 review H3).
-                      // Keyed on the IDENTITY flag, never the liveness one: for a
-                      // pageless IG row `instagramDirectConnected` and `isConnected`
-                      // flip false TOGETHER when the sweep clears a dead credential,
-                      // so a liveness-keyed identity re-renders the dead card as a
-                      // WhatsApp one and hides the reconnect banner in exactly the
-                      // state it exists for (PR #772 re-review, High).
-                      const isInstagramOnly = !page.facebookPageId && !!page.instagramDirect;
-                      const isWhatsAppOnly = !page.facebookPageId && !isInstagramOnly;
-                      // External profile links, one per connected channel — same
-                      // resolver the admin console and reseller portal use. An
-                      // Instagram-direct or WhatsApp-only page used to get no link.
-                      const channelUrls = getPageChannelUrls(page);
-                      return (
-                        <Card
-                          key={page.id}
-                          id={`page-${page.id}`}
-                          hover
-                          className={clsx(
-                            'animate-slide-up border-none shadow-2xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1',
-                            dimmed && 'opacity-75 hover:opacity-100'
-                          )}
-                          style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
-                        >
-              {/* Header with gradient background */}
-              <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
-                {/* Page avatar */}
-                <div className={clsx(
-                  'w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden flex items-center justify-center',
-                  isInstagramOnly ? 'bg-gradient-to-br from-purple-500 to-pink-500'
-                    : isWhatsAppOnly ? 'bg-[#25D366]' : 'bg-brand-600'
-                )}>
-                  {getPageAvatarUrl(page) && !imgError[page.id] ? (
-                    <img
-                      src={getPageAvatarUrl(page)!}
-                      alt={page.name}
-                      className="w-full h-full object-cover"
-                      onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
-                    />
-                  ) : isInstagramOnly ? (
-                    <Instagram className="w-7 h-7 text-white" aria-hidden="true" />
-                  ) : isWhatsAppOnly ? (
-                    <WhatsAppIcon className="w-7 h-7 text-white" aria-hidden="true" />
-                  ) : (
-                    <FileText className="w-7 h-7 text-white" />
-                  )}
-                </div>
-
-                {/* Page info */}
-                <div className="min-w-0 flex-1 text-start">
-                  <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
-                  {/* No "Add info" chip here. A page missing its Business Info
-                      already says so twice below — the amber nudge banner (with
-                      the reason and an "Add now" button) and the Business Info
-                      CTA — and all three opened the same editor. One alert plus
-                      one persistent entry point; the chip was the third. */}
-                </div>
-
-                {/* External links — one per connected channel (Facebook / Instagram /
-                    WhatsApp), same as the admin console and reseller portal. */}
-                {(channelUrls.facebook || channelUrls.instagram || channelUrls.whatsapp) && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {channelUrls.facebook && (
-                      <a
-                        href={channelUrls.facebook}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#1877F2] transition-colors"
-                        aria-label={`${tc('openOn')} Facebook`}
-                      >
-                        <Facebook className="w-4 h-4" />
-                      </a>
-                    )}
-                    {channelUrls.instagram && (
-                      <a
-                        href={channelUrls.instagram}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#E4405F] transition-colors"
-                        aria-label={`${tc('openOn')} Instagram`}
-                      >
-                        <Instagram className="w-4 h-4" />
-                      </a>
-                    )}
-                    {channelUrls.whatsapp && (
-                      <a
-                        href={channelUrls.whatsapp}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-[#128C7E] transition-colors"
-                        aria-label={`${tc('openOn')} WhatsApp`}
-                      >
-                        <WhatsAppIcon className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page).
-                  `strong` shows the honest "can only route to contact until you add info" copy —
-                  rolled out to ALL merchants (2026-07-14, D-025), previously a founder-only canary. */}
-              {needsBusinessInfo(page) && (
-                <BusinessInfoNudgeBanner onAdd={() => openKbEditorFor(page)} strong />
-              )}
-
-              {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
-                  card has no Facebook credential to reconnect */}
-              {page.isConnected === false && !!page.facebookPageId && (
-                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold">{t('reconnectRequired')}</p>
-                      <p className="text-xs mt-0.5">{t('reconnectDescription')}</p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setShowReconnectDialog(true)}
-                    disabled={syncing}
-                    className="w-full"
-                    icon={<LinkIcon className="w-3.5 h-3.5" />}
-                  >
-                    {t('reconnect')}
-                  </Button>
-                  {/* Secondary, deliberately quiet: most disconnections are accidents
-                      where reconnecting is the right answer. Archiving lives here (not
-                      in the card body below) because that body is pointer-events-none
-                      while disconnected. Hidden when WhatsApp is still live on this
-                      card — hiding it would bury a working channel — and for members,
-                      who would only get a 403 from the admin-scoped route. */}
-                  {canEdit && !page.whatsappConnected && (
-                    <button
-                      type="button"
-                      onClick={() => setArchiveCandidate(page)}
-                      className="self-center text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
-                    >
-                      {t('archiveAction')}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Instagram-direct reconnect banner — the M1 sweep clears the stored
-                  credential when Meta pronounces it dead (Graph 190), which flips
-                  isConnected false on this card. There is no Facebook to reconnect
-                  through: the fix is re-running the same Instagram Login connect,
-                  which updates the SAME row (connectInstagramDirect reconnect path). */}
-              {isInstagramOnly && page.isConnected === false && (
-                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold">{t('instagramReconnectRequired')}</p>
-                      <p className="text-xs mt-0.5">{t('instagramReconnectDescription')}</p>
-                    </div>
-                  </div>
-                  {isOwner && (
-                    <Button
-                      size="sm"
-                      onClick={() => void startInstagramConnect()}
-                      className="w-full"
-                      icon={<LinkIcon className="w-3.5 h-3.5" />}
-                    >
-                      {t('reconnect')}
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* WhatsApp reconnect banner — a SEPARATE banner from the Facebook one
-                  above, because the two channels fail independently: a page can have a
-                  healthy Facebook token and a dead WhatsApp one (Meta forces a 60-day
-                  expiry on WhatsApp business tokens), and a WhatsApp-only card has no
-                  Facebook credential at all so the banner above never fires for it.
-                  The connect action is the same Embedded Signup popup as a first-time
-                  connect — re-running it mints a fresh token. */}
-              {page.whatsappNeedsReconnect && (
-                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold">{t('whatsappReconnectRequired')}</p>
-                      <p className="text-xs mt-0.5">{t('whatsappReconnectDescription')}</p>
-                    </div>
-                  </div>
-                  {isOwner && (
-                    <Button
-                      size="sm"
-                      onClick={() => requestConnectWhatsApp(page.id)}
-                      disabled={connectingWhatsApp === page.id}
-                      className="w-full"
-                      icon={<LinkIcon className="w-3.5 h-3.5" />}
-                    >
-                      {t('whatsappConnectButton')}
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* Full-card lock only when nothing on the card still works: a page
-                  whose FB token died but whose WhatsApp is connected keeps replying
-                  on WhatsApp, so only the FB/IG rows get locked (below). */}
-              <div className={clsx('p-4 sm:p-6 flex-1 flex flex-col gap-6', page.isConnected === false && !page.whatsappConnected && 'opacity-60 pointer-events-none')}>
-                {/* Platform Toggles */}
-                <div className="flex flex-col gap-3">
-                  {/* Facebook + Instagram rows — hidden on a WhatsApp-only card */}
-                  {!isWhatsAppOnly && (<div className={clsx('flex flex-col gap-3', page.isConnected === false && 'opacity-60 pointer-events-none')}>
-                  {/* Facebook row — meaningless on an Instagram-only card (there is no
-                      Messenger to answer), and its toggle would be the same dead
-                      affordance the hidden Instagram row used to be. */}
-                  {!isInstagramOnly && (
-                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'icon-bg-blue' : 'bg-surface-200 text-icon-muted'}`}>
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900 dark:text-blue-300' : 'text-muted-foreground'}`}>Facebook</p>
-                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500 dark:text-blue-400' : 'text-muted-foreground'}`}>
-                          {page.autoReplyEnabled ? tc('enabled') : tc('disabled')}
-                        </p>
-                      </div>
-                    </div>
-                    <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
-                      <Toggle
-                        enabled={page.autoReplyEnabled ?? false}
-                        onChange={(enabled) => handleToggle(page.id, enabled)}
-                        disabled={!canEdit}
-                        aria-label={`${t('autoReply')} Facebook - ${page.name}`}
-                      />
-                    </span>
-                  </div>
-                  )}
-
-                  {/* Instagram row */}
-                  <div
-                    className={clsx(
-                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
-                      page.instagramUsername
-                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800' : 'bg-background border-theme-border')
-                        : 'bg-background border-theme-border border-dashed'
-                    )}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={clsx(
-                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                        page.instagramUsername
-                          ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
-                          : 'bg-surface-100 text-icon-muted'
-                      )}>
-                        <Instagram className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className={clsx(
-                          'text-sm font-bold',
-                          page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900 dark:text-pink-300' : 'text-muted-foreground')
-                            : 'text-muted-foreground'
-                        )}>{t('platformInstagram')}</p>
-                        <div className="flex items-center gap-1">
-                          <p className={clsx(
-                            'text-xs font-medium',
-                            page.instagramUsername
-                              ? (page.instagramAutoReplyEnabled ? 'text-pink-500 dark:text-pink-400' : 'text-muted-foreground')
-                              : 'text-muted-foreground'
-                          )}>
-                            {page.instagramUsername
-                              ? `@${page.instagramUsername}`
-                              : t('instagramNotConnected')}
-                          </p>
-                          {!page.instagramUsername && (
-                            <InfoPopover label={t('instagramTooltip')}>
-                              <span className="block">{t('instagramTooltip')}</span>
-                            </InfoPopover>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {page.instagramUsername && (
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {isInstagramOnly && isOwner && (
-                          <button
-                            type="button"
-                            onClick={() => setRemoveInstagramOnlyPage(page)}
-                            className={clsx(
-                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
-                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
-                              // Same expanded hit area as the WhatsApp Unlink button —
-                              // destructive control beside a toggle.
-                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
-                            )}
-                            aria-label={`${t('instagramOnlyRemoveTitle')} - ${page.name}`}
-                            title={t('instagramOnlyRemoveTitle')}
-                          >
-                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        )}
-                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
-                          <Toggle
-                            enabled={page.instagramAutoReplyEnabled ?? false}
-                            onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                            disabled={!canEdit}
-                            aria-label={`${t('autoReply')} Instagram - ${page.name}`}
-                          />
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  </div>)}
-
-                  {/* WhatsApp row — master-switch gated so a dark deploy shows
-                      no WhatsApp surface; the whatsappConnected OR never hides
-                      an already-connected number. */}
-                  {!isInstagramOnly && ((whatsappVisible && whatsappConnectable !== false) || page.whatsappConnected) && (
-                  <div
-                    className={clsx(
-                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
-                      page.whatsappConnected
-                        ? (page.whatsappAutoReplyEnabled ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-background border-theme-border')
-                        : 'bg-background border-theme-border border-dashed'
-                    )}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={clsx(
-                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                        page.whatsappConnected
-                          ? (page.whatsappAutoReplyEnabled ? 'bg-[#25D366] text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
-                          : 'bg-surface-100 text-icon-muted'
-                      )}>
-                        <WhatsAppIcon className="w-4 h-4" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0">
-                        {/* Beta chip sets expectations on the newest channel — it is a
-                            deliberate promise-less label, not a gate. Keep it until
-                            WhatsApp has bedded in (see WHATSAPP_LAUNCH_RUNBOOK). */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={clsx(
-                            'text-sm font-bold',
-                            page.whatsappConnected && page.whatsappAutoReplyEnabled
-                              ? 'text-emerald-900 dark:text-emerald-300'
-                              : 'text-muted-foreground'
-                          )}>{t('platformWhatsApp')}</p>
-                          <Badge variant="warning" size="xs">{t('whatsappBeta')}</Badge>
-                        </div>
-                        <div className="flex items-center gap-1 min-w-0">
-                          {/* dir=ltr keeps the +NNN phone number readable in RTL.
-                              A phone number must never wrap: "+1 555-396-9839"
-                              broke across two lines on a narrow Arabic card and
-                              read as two different numbers (reported 2026-07-31).
-                              nowrap + truncate degrades to an ellipsis instead,
-                              tabular-nums keeps the digits from jittering. */}
-                          <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined}
-                            title={page.whatsappDisplayPhoneNumber ?? undefined}
-                            className={clsx(
-                            'text-xs font-medium whitespace-nowrap truncate tabular-nums text-start',
-                            page.whatsappConnected && page.whatsappAutoReplyEnabled
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-muted-foreground'
-                          )}>
-                            {page.whatsappConnected
-                              ? (page.whatsappDisplayPhoneNumber || t('platformWhatsApp'))
-                              : t('whatsappNotConnected')}
-                          </p>
-                          {!page.whatsappConnected && (
-                            <InfoPopover label={t('whatsappTooltip')}>
-                              <span className="block">{t('whatsappTooltip')}</span>
-                            </InfoPopover>
-                          )}
-                          {page.whatsappConnected && page.whatsappCoexistence === true && (
-                            <InfoPopover label={t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}>
-                              <span className="block">{t('whatsappCoexistenceInfo', { minutes: handoffPauseMinutes })}</span>
-                            </InfoPopover>
-                          )}
-                        </div>
-                        {/* Coexistence: the number is ALSO live on the merchant's WhatsApp
-                            Business app, whose own greeting/away automations would answer
-                            every customer a second time (D-109). Every Coexistence vendor
-                            tells merchants to switch those off — so do we, where the
-                            number lives. */}
-                        {page.whatsappConnected && page.whatsappCoexistence === true && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {t('whatsappCoexistenceHint')}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {page.whatsappConnected ? (
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {isOwner && (
-                          <button
-                            type="button"
-                            onClick={() => (isWhatsAppOnly ? setRemoveWhatsAppOnlyPage(page) : setDisconnectWhatsAppPage(page))}
-                            className={clsx(
-                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
-                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
-                              // 28px is well under the 44px touch minimum, and this
-                              // is a DESTRUCTIVE control sitting next to the toggle —
-                              // a mis-tap disconnects the number. Expand the hit area
-                              // without moving anything, same technique as Toggle.tsx.
-                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
-                            )}
-                            aria-label={`${t('whatsappDisconnect')} - ${page.name}`}
-                            title={t('whatsappDisconnect')}
-                          >
-                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        )}
-                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
-                          <Toggle
-                            enabled={page.whatsappAutoReplyEnabled ?? false}
-                            onChange={(enabled) => handleWhatsAppToggle(page.id, enabled)}
-                            disabled={!canEdit}
-                            aria-label={`${t('autoReply')} WhatsApp - ${page.name}`}
-                          />
-                        </span>
-                      </div>
-                    ) : (isOwner && whatsappVisible && (
-                      whatsappEntitled === true ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => requestConnectWhatsApp(page.id)}
-                          disabled={connectingWhatsApp === page.id}
-                        >
-                          {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
-                        </Button>
-                      ) : whatsappEntitled === false ? (
-                        // Refused: route to pricing instead of the Meta signup.
-                        // UpgradeCTA renders nothing on iOS native. The label
-                        // names the action that actually unblocks them — a lapsed
-                        // account is already ON a WhatsApp plan, so "upgrade"
-                        // would be advice it cannot act on.
-                        <UpgradeCTA className="flex-shrink-0">
-                          <Button size="sm" variant="secondary">
-                            {t(whatsappPlanIncluded === true ? 'whatsappRenewButton' : 'whatsappUpgradeButton')}
-                          </Button>
-                        </UpgradeCTA>
-                      ) : null // entitlement still loading
+                    {sectionPages.map((page) => (
+                      <PageCard key={page.id} page={page} index={globalIndex++} dimmed={dimmed} ctx={cardCtx} />
                     ))}
-                  </div>
-                  )}
-                </div>
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-background border border-theme-border">
-                  <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('totalIncoming')}</p>
-                    <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
-                  </div>
-                  <div className="py-3 text-center border-x border-theme-border">
-                    <div className="flex items-center justify-center gap-1 mb-1.5">
-                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('repliesSent')}</p>
-                      <RepliesBreakdownTooltip page={page} />
-                    </div>
-                    <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
-                  </div>
-                  <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('replyRate')}</p>
-                    <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
-                  </div>
-                </div>
-
-                {/* E-commerce Connected Badge — hidden on mobile when no store, invisible on desktop to keep card heights equal.
-                    Named from the server-resolved platform: the badge used to hardcode "Shopify" and
-                    told every Salla/Zid merchant they were on the wrong platform (found 2026-08-23). */}
-                <div
-                  className={clsx(
-                    'w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 shadow-md bg-gradient-to-br',
-                    page.ecommerceStorePlatform === 'shopify'
-                      ? 'from-[#96BF48] to-[#5A8A1F]'
-                      : 'from-brand-500 to-brand-700',
-                    page.ecommerceStoreId ? 'visible' : 'hidden lg:flex lg:invisible',
-                  )}
-                  aria-hidden={!page.ecommerceStoreId}
-                >
-                  <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
-                  <span className="text-white text-[12px] font-semibold">
-                    {page.ecommerceStorePlatform
-                      ? t('storeConnectedBadge', { platform: tInt(`platformPicker.${page.ecommerceStorePlatform}`) })
-                      : ''}
-                  </span>
-                </div>
-
-                {/* Business Info CTA — the card's persistent entry point, and the
-                    only place the FILLED state is shown ("Edit Business Info").
-                    Reads isKbFilled, NOT page.knowledgeBase: the list endpoint
-                    (GET /pages?view=list) stopped shipping the text on 2026-08-18
-                    (#806) and sends a server-computed `kbFilled` instead, so the
-                    raw read was falsy for EVERY page and this CTA was stuck in its
-                    empty state even for merchants whose info was complete. */}
-                <button
-                  onClick={() => openKbEditorFor(page)}
-                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${kbFilled
-                    ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
-                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
-                    }`}
-                >
-                  <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${kbFilled ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
-                        <BookOpen className="w-5 h-5" />
-                      </div>
-                      <div className="text-start">
-                        {/* A member opens the same editor read-only, so the CTA
-                            must not promise a write: «أضف معلومات» and «اضغط
-                            للتعديل» are both instructions they cannot follow. */}
-                        <p className={`text-sm font-bold ${kbFilled ? 'text-brand-900 dark:text-brand-400' : 'text-foreground/70'}`}>
-                          {!canEdit
-                            ? t('viewBusinessInfo')
-                            : kbFilled
-                              ? t('businessInfoActive')
-                              : t('addBusinessInfo')
-                          }
-                        </p>
-                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
-                          {!canEdit
-                            ? tc('viewOnlyHint')
-                            : kbFilled
-                              ? t('clickToEdit')
-                              : t('improveAIQuality')
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronRight className={`w-5 h-5 transition-transform ${kbFilled ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
-                  </div>
-                </button>
-              </div>
-
-              {/* Test Smart Reply */}
-              <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
-                <button
-                  onClick={() => { setTestReplyPrefillSample(false); setTestSmartReplyPage(page); }}
-                  className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
-                        <FlaskConical className="w-5 h-5" />
-                      </div>
-                      <div className="text-start">
-                        <p className="text-sm font-bold text-foreground/70">{tTest('title')}</p>
-                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{tTest('description')}</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </button>
-              </div>
-
-              {/* Status Footer */}
-              <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={clsx(
-                    'w-2 h-2 rounded-full',
-                    page.isConnected === false
-                      ? 'bg-amber-500'
-                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
-                  )}></div>
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    {page.isConnected === false
-                      ? t('disconnected')
-                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled) ? tc('active') : tc('inactive')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span
-                    className="text-xs font-bold uppercase tracking-tighter"
-                    title={page.lastActivity ? t('lastActivity') : ''}
-                  >
-                    {page.lastActivity ? formatTime(page.lastActivity) : formatDate(page.createdAt as unknown as string)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-                      );
-                    })}
                   </div>
                 </div>
               );
