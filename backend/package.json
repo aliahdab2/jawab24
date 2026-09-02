@@ -55,7 +55,7 @@
     "dotenv": "^16.3.1",
     "drizzle-orm": "0.45.2",
     "exceljs": "^4.4.0",
-    "fastify": "5.8.5",
+    "fastify": "5.12.1",
     "firebase-admin": "^14.2.0",
     "geoip-lite": "^1.4.10",
     "ioredis": "^5.8.2",
