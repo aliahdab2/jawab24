@@ -9,7 +9,8 @@ import type { StripeElementLocale } from '@stripe/stripe-js';
 import { getStripePromise, getStripeAppearance } from '@/lib/stripeClient';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
-import { isWhatsAppMarketable } from '@/lib/featureFlags';
+import { isWhatsAppMarketableFor } from '@/lib/whatsappAvailability';
+import { useSubscriptionUsage } from '@/hooks/useSubscriptionUsage';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { ShamCashPanel } from '@/components/billing/ShamCashPanel';
 import { useAuthStore } from '@/lib/store';
@@ -310,6 +311,12 @@ function CheckoutPage() {
   const tLanding = useTranslations('landing');
   const tPayment = useTranslations('payment');
   const { isAuthenticated, user } = useAuthStore();
+
+  // Usage summary — only read here for the D-117 marketplace WhatsApp block, so
+  // the order summary never advertises a channel a Zid-connected account (even a
+  // Stripe-paying one) can never use. Passive copy: the row may flash for a Zid
+  // merchant while this loads, same posture as the /pricing grid.
+  const { data: usage } = useSubscriptionUsage(isAuthenticated);
 
   // Where the header "back" link goes — top-up buyers came from the dashboard
   // modal, subscription buyers from pricing.
@@ -870,7 +877,7 @@ function CheckoutPage() {
                                 {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
                               </span>
                             </div>
-                            {isWhatsAppMarketable() && plan.whatsappEnabled && (
+                            {isWhatsAppMarketableFor(usage) && plan.whatsappEnabled && (
                               <div className="flex items-center gap-2.5">
                                 <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
                                 <span className="text-foreground/80 text-sm text-start">

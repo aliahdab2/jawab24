@@ -22,7 +22,7 @@ import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { Check, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
-import { isWhatsAppMarketable } from '@/lib/featureFlags';
+import { isWhatsAppMarketableFor } from '@/lib/whatsappAvailability';
 import { captureError } from '@/lib/sentryHelpers';
 import { DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { getMarketplaceBilling } from '@/lib/marketplaceBilling';
@@ -53,6 +53,7 @@ function ScalePlanCard({
   loading,
   onSelect,
   locale,
+  whatsappMarketable,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -65,6 +66,9 @@ function ScalePlanCard({
   loading: boolean;
   onSelect: () => void;
   locale: string;
+  /** WhatsApp row on the feature list — global marketing flag AND not the
+   *  D-117 Zid marketplace block (isWhatsAppMarketableFor). */
+  whatsappMarketable: boolean;
 }) {
   const tPricing = useTranslations('pricing');
 
@@ -140,8 +144,9 @@ function ScalePlanCard({
         <ul className="space-y-2">
           {[
             plan.maxPages === null ? tPricing('featurePagesUnlimited') : tPricing('featurePages', { count: plan.maxPages }),
-            // Scale tiers all include WhatsApp; hidden until public launch.
-            ...(isWhatsAppMarketable() ? [tPricing('featureWhatsApp')] : []),
+            // Scale tiers all include WhatsApp; hidden until public launch and
+            // for Zid-connected accounts (D-117), which can never use the channel.
+            ...(whatsappMarketable ? [tPricing('featureWhatsApp')] : []),
             tPricing('ecommerceIntegration'),
             tPricing('prioritySupport'),
             tPricing('featurePostRepliesUnlimited'),
@@ -230,6 +235,9 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
   const currentPlanSlug = usage?.subscription?.plan?.slug;
   const hasActiveSubscription = Boolean(currentPlanSlug);
   const currentPlanPrice = usage?.subscription?.plan?.price ?? 0;
+  // WhatsApp copy on the cards is suppressed for a Zid-connected account:
+  // it can never use the channel (D-117), so the cards must not advertise it.
+  const whatsappMarketable = isWhatsAppMarketableFor(usage);
 
   if (iosRedirecting) return null;
 
@@ -287,6 +295,7 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
                   loading={changingPlan === plan.id}
                   onSelect={() => handleSelectPlan(plan.id)}
                   locale={locale}
+                  whatsappMarketable={whatsappMarketable}
                 />
               </div>
             ))}
