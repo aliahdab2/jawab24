@@ -485,6 +485,18 @@ test.describe('Payment Flow — Sanctions', () => {
   test('sanctions block on checkout page shows notice', async ({ page }) => {
     await page.addInitScript(setupAuthState);
 
+    // This user is AUTHENTICATED, unlike the rest of this describe, so checkout
+    // fetches the usage summary (for the D-117 WhatsApp row, #1034). The
+    // beforeEach's 401 stub would make the AuthManager log the user out and
+    // bounce to /login before the sanctions notice ever renders — answer with a
+    // real summary instead, as the Checkout describe does.
+    await page.route('**/api/subscription/usage**', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
+      });
+    });
+
     await page.route('**/api/geo/check*', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
