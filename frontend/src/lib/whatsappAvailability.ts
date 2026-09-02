@@ -1,4 +1,5 @@
 import type { UsageSummary } from '@jawab24/shared';
+import { isWhatsAppMarketable } from '@/lib/featureFlags';
 
 /**
  * Whether the WhatsApp CONNECT flow may be offered on this account.
@@ -40,4 +41,19 @@ export function isWhatsAppBlockedForMarketplace(
     usage: UsageSummary | null | undefined,
 ): boolean {
     return Boolean(usage?.subscription?.whatsappUnavailable);
+}
+
+/**
+ * Whether WhatsApp may be ADVERTISED to this account on the marketing surfaces
+ * (pricing plan cards, /pricing/scale, the checkout summary). Layers the D-117
+ * marketplace block on the global marketing flag: a Zid-connected account can
+ * never use the channel, so no plan card may sell it. Same loading posture as
+ * `isWhatsAppBlockedForMarketplace` — feature copy is passive, so showing the
+ * default rows while the usage summary loads is acceptable; never gate an
+ * ACTION on this.
+ */
+export function isWhatsAppMarketableFor(
+    usage: UsageSummary | null | undefined,
+): boolean {
+    return isWhatsAppMarketable() && !isWhatsAppBlockedForMarketplace(usage);
 }

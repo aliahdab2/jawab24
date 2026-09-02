@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { UsageSummary } from '@jawab24/shared';
-import { isWhatsAppConnectable, isWhatsAppBlockedForMarketplace } from '../whatsappAvailability';
+import {
+    isWhatsAppConnectable,
+    isWhatsAppBlockedForMarketplace,
+    isWhatsAppMarketableFor,
+} from '../whatsappAvailability';
 
 // Minimal usage shape — only the fields isWhatsAppConnectable reads.
 const usage = (whatsappUnavailable?: { reason: 'zid_marketplace' }): UsageSummary =>
@@ -45,5 +49,46 @@ describe('isWhatsAppBlockedForMarketplace', () => {
     it('is false while usage loads and for null usage — copy is passive, default text is acceptable', () => {
         expect(isWhatsAppBlockedForMarketplace(undefined)).toBe(false);
         expect(isWhatsAppBlockedForMarketplace(null)).toBe(false);
+    });
+});
+
+describe('isWhatsAppMarketableFor (marketing surfaces: /pricing, /pricing/scale, checkout)', () => {
+    // The env flags re-read process.env on every call, so vi.stubEnv suffices.
+    const publiclyLaunched = () => {
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123456');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-abc');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', '');
+    };
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('is true after public launch for an account with no Zid block', () => {
+        publiclyLaunched();
+        expect(isWhatsAppMarketableFor(usage())).toBe(true);
+    });
+
+    it('is false for a Zid-connected account even after public launch (D-117)', () => {
+        // Mutation: drop the isWhatsAppBlockedForMarketplace read and this
+        // returns true — the plan cards would again advertise WhatsApp to a
+        // Zid merchant (the /pricing/scale regression, 2026-09-02).
+        publiclyLaunched();
+        expect(isWhatsAppMarketableFor(usage({ reason: 'zid_marketplace' }))).toBe(false);
+    });
+
+    it('is false while WhatsApp is dark or canary-gated, regardless of usage', () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        expect(isWhatsAppMarketableFor(usage())).toBe(false);
+
+        publiclyLaunched();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true');
+        expect(isWhatsAppMarketableFor(usage())).toBe(false);
+    });
+
+    it('defaults to shown while usage loads (passive copy — never gate an action on this)', () => {
+        publiclyLaunched();
+        expect(isWhatsAppMarketableFor(undefined)).toBe(true);
+        expect(isWhatsAppMarketableFor(null)).toBe(true);
     });
 });

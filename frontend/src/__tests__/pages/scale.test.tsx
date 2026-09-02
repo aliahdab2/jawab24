@@ -202,6 +202,28 @@ describe('ScalePage (/pricing/scale)', () => {
             await screen.findByText('30,000');
             expect(screen.queryByText(enPricing.featureWhatsApp)).not.toBeInTheDocument();
         });
+
+        it('absent for a Zid-connected account even after public launch (D-117)', async () => {
+            // Regression (2026-09-02): this page gated on the bare global flag,
+            // so a Zid merchant — whose account can never use WhatsApp — was
+            // shown "WhatsApp Smart Replies" on both Scale cards.
+            vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+            vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+            mockGetUsage.mockResolvedValue({
+                data: {
+                    subscription: {
+                        ...proUsage.subscription,
+                        whatsappUnavailable: { reason: 'zid_marketplace' },
+                    },
+                },
+            });
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            // Wait until the usage summary has landed (the CTA flips to
+            // "Upgrade") — the row is hidden by the usage read, not the env.
+            await screen.findByRole('button', { name: /upgrade/i });
+            expect(screen.queryByText(enPricing.featureWhatsApp)).not.toBeInTheDocument();
+        });
     });
 
     // --- Mobile tab selector (shared PlanTabSelector, only with ≥2 plans) -------

@@ -23,7 +23,7 @@ import { useLocalPaymentRail } from '@/hooks/useLocalPaymentRail';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
-import { isWhatsAppMarketable } from '@/lib/featureFlags';
+import { isWhatsAppMarketableFor } from '@/lib/whatsappAvailability';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
@@ -246,7 +246,8 @@ function PlanCard({
         />
 
         {/* WhatsApp is included from Starter up (D-118) — crossed out on Basic
-            only. Hidden entirely until public launch (isWhatsAppMarketable). */}
+            only. Hidden entirely until public launch, and for Zid-connected
+            accounts (isWhatsAppMarketableFor, D-117). */}
         {whatsappMarketable && (
           <FeatureRow
             included={plan.whatsappEnabled}
@@ -387,8 +388,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
   // WhatsApp copy on the plan cards is suppressed for a Zid-connected account:
   // it can never use the channel (D-117), so the cards must not advertise it.
-  // Layered on the existing marketing flag rather than replacing it.
-  const whatsappMarketable = isWhatsAppMarketable() && !usage?.subscription?.whatsappUnavailable;
+  const whatsappMarketable = isWhatsAppMarketableFor(usage);
 
   // Yearly billing is only offered when at least one paid plan actually has a
   // yearly Stripe price. Without this gate the toggle promised "save ~17%"
