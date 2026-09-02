@@ -232,6 +232,10 @@ function toPartnerMerchantDetail(
             instagramAutoReplyEnabled: p.instagramAutoReplyEnabled,
             whatsappConnected: p.whatsappConnected,
             whatsappAutoReplyEnabled: p.whatsappAutoReplyEnabled,
+            // Severed link (token valid, webhooks dead) — same connection-state
+            // class as `disconnected` above, and the shared predicate needs it
+            // so the portal's "replying" verdict cannot drift from the console's.
+            whatsappNeedsReconnect: !!p.whatsappNeedsReconnect,
             disconnected: p.disconnected,
             disconnectReason: p.disconnectReason,
             archivedAt: p.archivedAt,

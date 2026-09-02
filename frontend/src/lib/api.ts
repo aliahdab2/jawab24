@@ -1167,6 +1167,8 @@ export interface PartnerMerchantPage {
   instagramAutoReplyEnabled: boolean | null;
   whatsappConnected: boolean;
   whatsappAutoReplyEnabled: boolean | null;
+  /** Link severed at Meta while the token still validates — merchant must reconnect. */
+  whatsappNeedsReconnect: boolean;
   disconnected: boolean;
   disconnectReason: string | null;
   archivedAt: string | null;
