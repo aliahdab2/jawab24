@@ -16,12 +16,13 @@ import { pages, whatsappNotificationTemplates } from '../db/schema';
 import { safeDecryptToken } from './facebookCrypto';
 import { whatsappService } from './whatsapp';
 import { captureError } from '../utils/sentryHelpers';
-import { normalizeCustomerPhoneForWhatsApp } from '@jawab24/shared';
+import { normalizeCustomerPhoneForWhatsApp, type OrderNotificationType, type WhatsAppTemplateStatus } from '@jawab24/shared';
 import {
     allCanonicalTemplates,
     buildTemplateParams,
     canonicalTemplateFor,
     isWhatsAppNotificationType,
+    WHATSAPP_NOTIFICATION_TYPES,
     type TemplateLanguage,
 } from './whatsappNotificationTemplates';
 
@@ -329,6 +330,65 @@ async function resolveTemplateStatus(
         });
         return current;
     }
+}
+
+/**
+ * Meta's review state per notification TYPE, collapsed across both languages —
+ * the shape the settings card renders (`WhatsAppTemplateStatus`).
+ *
+ * A type is `approved` only when the Arabic AND English variants are: the
+ * language is picked from the customer's phone at send time, so a half-approved
+ * pair is not ready.
+ *
+ * ⛔ Goes through `resolveTemplateStatus`, exactly like the send path, and that
+ * is the whole point. The card's status chip used to be served by a raw SELECT
+ * in the controller, so it reported whatever was last written and nothing ever
+ * refreshed it: `resolveTemplateStatus` is the ONLY code that re-polls Meta, and
+ * it was reachable only from a send — which cannot happen while a template is
+ * unapproved. Measured 2026-09-03: all 8 production template rows sat `pending`
+ * with `last_checked_at == last_submitted_at`, untouched for five days, while
+ * the card cheerfully displayed «waiting for approval». Reading through the same
+ * function means the card cannot drift from what a send would actually find.
+ *
+ * One SELECT per template (8 today) rather than one for the page: staleness is
+ * per row, and duplicating the decision here to save round-trips is how the two
+ * paths diverged in the first place (Rule 10.8). This serves a settings card,
+ * not the reply path — the latency budget in Rule 17 does not apply.
+ */
+export async function resolveTemplateStatusesByType(
+    sender: WhatsAppSender,
+): Promise<Partial<Record<OrderNotificationType, WhatsAppTemplateStatus>>> {
+    const entries = await Promise.all(
+        WHATSAPP_NOTIFICATION_TYPES.map(async type => {
+            const perLanguage = await Promise.all(
+                (['ar', 'en'] as const).map(async lang => {
+                    const template = canonicalTemplateFor(type, lang);
+                    return resolveTemplateStatus(sender, template.name, template.language);
+                }),
+            );
+            return [type, collapseLanguageStatuses(perLanguage)] as const;
+        }),
+    );
+    // Keys come from WHATSAPP_NOTIFICATION_TYPES, so they ARE OrderNotificationType
+    // — `Object.fromEntries` just cannot say so.
+    return Object.fromEntries(entries) as Partial<Record<OrderNotificationType, WhatsAppTemplateStatus>>;
+}
+
+/**
+ * Collapse the two language variants into the card's contract.
+ *
+ * `unknown` folds into `missing` on purpose: to a merchant both mean "Meta has
+ * no such template for you yet", and it is the only honest mapping — the public
+ * type is `approved | pending | rejected | missing`, so surfacing the raw
+ * `unknown` rendered the untranslated key `templateStatus.unknown` in the card.
+ */
+function collapseLanguageStatuses(
+    statuses: Array<'pending' | 'approved' | 'rejected' | 'unknown'>,
+): WhatsAppTemplateStatus {
+    if (statuses.includes('rejected')) return 'rejected';
+    if (statuses.every(s => s === 'approved')) return 'approved';
+    if (statuses.includes('unknown')) return 'missing';
+    return 'pending';
 }
 
 /**

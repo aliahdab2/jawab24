@@ -208,7 +208,9 @@ export function TeamPanel() {
   };
 
   const handleResend = async (invite: InviteRow) => {
-    const contactValue = (invite.phone ?? invite.email ?? '').toLowerCase();
+    // Email only — the Resend button is not rendered for a legacy phone invite,
+    // because the server refuses a phone contact outright (D-123).
+    const contactValue = (invite.email ?? '').toLowerCase();
     setResendingId(invite.id);
     try {
       const res = await workspaceApi.createInvite(contactValue);
@@ -474,6 +476,11 @@ export function TeamPanel() {
           {invites.map((invite) => {
             const hours = hoursUntil(invite.expiresAt);
             const isExpired = hours <= 0;
+            // A phone contact only appears on invites created before the SMS
+            // rail was retired (D-123). Still rendered — the row is real and the
+            // number is who it was addressed to — but it cannot be resent: the
+            // server refuses a phone contact with 400 `email_required`, so
+            // offering the button would only produce an opaque failure.
             const displayContact = invite.phone ?? invite.email ?? '';
             const isPhone = !!invite.phone;
             const ContactIcon = isPhone ? Phone : Mail;
@@ -492,7 +499,10 @@ export function TeamPanel() {
                     <p className="text-xs text-muted-foreground">
                       {isExpired ? t('expired') : t('expiresIn', { hours })}
                     </p>
-                    {isAdmin && (
+                    {isAdmin && isPhone && (
+                      <p className="text-xs text-muted-foreground">{t('inviteResendUnavailablePhone')}</p>
+                    )}
+                    {isAdmin && !isPhone && (
                       <button
                         onClick={() => handleResend(invite)}
                         disabled={resendingId === invite.id}

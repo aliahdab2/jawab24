@@ -49,7 +49,7 @@
     "missing": "Not submitted for approval yet"
   },
   "connectWhatsAppHint": "Link a WhatsApp number to this store to start sending.",
-  "whatsappTemplateNote": "Delivered as a Meta-approved WhatsApp template, so its wording cannot be edited here. The text above is the copy kept on record for this notification.",
+  "whatsappTemplateNote": "Delivered as a Meta-approved WhatsApp template whose wording is fixed at approval time. Editing the text above does NOT change what your customer receives — it is kept only as this notification's record.",
   "noDeliveryRail": "Not available yet — this type has no approved WhatsApp template.",
   "whatsappUnavailableZid": "WhatsApp cannot be connected for stores linked through Zid at the moment, so these notifications cannot be sent yet."
 }

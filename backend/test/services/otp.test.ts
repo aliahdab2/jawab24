@@ -236,6 +236,22 @@ describe('OtpService', () => {
      * who will never receive one — the exact failure shape the dead SMS rail
      * used to produce, and the reason it was removed rather than left in place.
      */
+    // The controller gates on this BEFORE minting, and it does so against a
+    // MOCK — so nothing outside this case can catch the production value being
+    // wrong. If a transport is ever added, this test is the one that must be
+    // changed deliberately, alongside `sendOtp`.
+    describe('hasTransport', () => {
+        it('reports that no transport exists', () => {
+            expect(service.hasTransport()).toBe(false);
+        });
+
+        it('agrees with sendOtp — a false report and a throwing send are one fact', async () => {
+            expect(service.hasTransport()).toBe(false);
+            await expect(service.sendOtp('+966500000001', '123456'))
+                .rejects.toBeInstanceOf(OtpTransportUnavailableError);
+        });
+    });
+
     describe('sendOtp', () => {
         it('throws instead of pretending a code was delivered', async () => {
             await expect(service.sendOtp('+966500000001', '123456'))

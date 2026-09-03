@@ -834,6 +834,16 @@ export class AuthController {
             return reply.status(400).send({ error: 'country_blocked', message: 'Phone verification is not available for this country' });
         }
 
+        // Refuse before minting. `storeOtp` writes an `otp_codes` row and burns
+        // the per-phone rate-limit slot, so minting a code that provably cannot
+        // be delivered would both litter the table and rate-limit a user out of
+        // a feature that never worked. `sendOtp` throws for the same reason and
+        // stays the backstop below — this only stops the useless write.
+        if (!otpService.hasTransport()) {
+            request.log.error({ phone }, 'OTP requested with no delivery transport configured');
+            return reply.status(503).send({ error: 'otp_unavailable', message: 'Phone verification is temporarily unavailable' });
+        }
+
         try {
             const code = otpService.generateCode();
             await otpService.storeOtp(phone, code);

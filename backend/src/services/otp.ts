@@ -103,6 +103,20 @@ export class OtpService {
     }
 
     /**
+     * Can any channel carry a verification code right now?
+     *
+     * ❌ Nothing can (D-123) — see `sendOtp`. It exists as a predicate so the
+     * caller can refuse BEFORE minting: `storeOtp` writes an `otp_codes` row and
+     * consumes the per-phone rate-limit slot, and doing that for a code nobody
+     * can receive is both a pointless write and a way to lock a user out of a
+     * feature that never worked. `sendOtp` still throws — this is the polite
+     * gate, that is the guarantee.
+     */
+    hasTransport(): boolean {
+        return false;
+    }
+
+    /**
      * Deliver a code to a phone — ❌ NO TRANSPORT EXISTS TODAY.
      *
      * The SMS rail was retired with the Vonage provider (D-123), and WhatsApp

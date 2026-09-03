@@ -28,6 +28,7 @@
   "inviteSentEmail": "تم إرسال الدعوة بالبريد الإلكتروني إلى {contact}",
   "inviteResent": "تم إنشاء رابط دعوة جديد لـ {contact}",
   "inviteResentEmail": "تمت إعادة إرسال الدعوة بالبريد الإلكتروني إلى {contact}",
+  "inviteResendUnavailablePhone": "لا يمكن إعادة إرسالها — دعوات الفريق بالبريد الإلكتروني فقط",
   "inviteRevoked": "تم إلغاء الدعوة",
   "memberRemoved": "تمت إزالة {name}",
   "roleUpdated": "تم تحديث الدور",

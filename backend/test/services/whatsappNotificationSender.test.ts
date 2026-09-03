@@ -26,6 +26,7 @@ import { whatsappService } from '../../src/services/whatsapp';
 import { safeDecryptToken } from '../../src/services/facebookCrypto';
 import {
     ensureTemplatesProvisioned,
+    resolveTemplateStatusesByType,
     resolveWhatsAppSender,
     sendWhatsAppNotification,
     WhatsAppNotificationError,
@@ -251,6 +252,99 @@ describe('sendWhatsAppNotification', () => {
             'waba-1', 'enc:v1:token', 'jawab24_order_confirmed_ar_v1', 'ar',
         );
         expect(whatsappService.sendTemplateMessage).toHaveBeenCalled();
+    });
+});
+
+/**
+ * The read path the settings card depends on since D-123 retired the channel
+ * picker. It exists because the card's status chip used to come from a raw
+ * SELECT in the controller: `resolveTemplateStatus` is the only code that
+ * re-polls Meta, it was reachable only from a send, and a send cannot happen
+ * while a template is unapproved. Production sat at 8 `pending` rows with
+ * `last_checked_at == last_submitted_at` for five days (2026-08-29 → 09-03)
+ * while the card displayed «waiting for approval» and nothing refreshed it.
+ */
+describe('resolveTemplateStatusesByType', () => {
+    const SENDER = { pageId: 'page-1', phoneNumberId: 'pn-1', wabaId: 'waba-1', accessToken: 'tok' };
+    /** 4 WhatsApp-capable types, one entry each. */
+    const CAPABLE_TYPES = 4;
+
+    const fresh = (status: string) => ({ status, lastCheckedAt: new Date(), providerTemplateId: 'tpl-1' });
+    const stalePending = () => ({
+        status: 'pending',
+        // Older than PENDING_RECHECK_MS (10 min) ⇒ must re-poll.
+        lastCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+        providerTemplateId: 'tpl-1',
+    });
+
+    it('reports approved only when BOTH language variants are', async () => {
+        vi.mocked(db.select).mockReturnValue(mockTemplateLookup([fresh('approved')]) as never);
+
+        const statuses = await resolveTemplateStatusesByType(SENDER);
+
+        expect(Object.keys(statuses)).toHaveLength(CAPABLE_TYPES);
+        expect(Object.values(statuses).every(v => v === 'approved')).toBe(true);
+    });
+
+    // The language is chosen from the customer's phone at send time, so a
+    // half-approved pair cannot be advertised as ready.
+    it('is not approved when one language is still pending', async () => {
+        let call = 0;
+        vi.mocked(db.select).mockImplementation(
+            () => mockTemplateLookup([call++ % 2 === 0 ? fresh('approved') : fresh('pending')]) as never,
+        );
+
+        const statuses = await resolveTemplateStatusesByType(SENDER);
+
+        expect(Object.values(statuses)).not.toContain('approved');
+        expect(Object.values(statuses)).toContain('pending');
+    });
+
+    it('rejected wins over every other state', async () => {
+        let call = 0;
+        vi.mocked(db.select).mockImplementation(
+            () => mockTemplateLookup([call++ % 2 === 0 ? fresh('approved') : fresh('rejected')]) as never,
+        );
+
+        const statuses = await resolveTemplateStatusesByType(SENDER);
+
+        expect(Object.values(statuses).every(v => v === 'rejected')).toBe(true);
+    });
+
+    // `resolveTemplateStatus` says `unknown` both for "no row" and for "a poll
+    // that could not confirm". The card's contract has no such value, so leaking
+    // it rendered the untranslated key `templateStatus.unknown`.
+    it('folds unknown/absent rows into `missing`, never leaking `unknown`', async () => {
+        // No row locally AND Meta cannot confirm one — `mapMetaStatus(null)` is
+        // `unknown`, which is the state that used to reach the card raw.
+        vi.mocked(db.select).mockReturnValue(mockTemplateLookup([]) as never);
+        vi.mocked(whatsappService.getMessageTemplateStatus).mockResolvedValue(null);
+
+        const statuses = await resolveTemplateStatusesByType(SENDER);
+
+        expect(Object.values(statuses).every(v => v === 'missing')).toBe(true);
+        expect(Object.values(statuses)).not.toContain('unknown');
+    });
+
+    // ⭐ The defect this function was added for: a stale record must be REFRESHED
+    // from Meta on a read, not merely reported.
+    it('re-polls Meta for a stale pending record and returns the fresh verdict', async () => {
+        vi.mocked(db.select).mockReturnValue(mockTemplateLookup([stalePending()]) as never);
+        vi.mocked(whatsappService.getMessageTemplateStatus).mockResolvedValue('APPROVED');
+
+        const statuses = await resolveTemplateStatusesByType(SENDER);
+
+        expect(whatsappService.getMessageTemplateStatus).toHaveBeenCalledTimes(CAPABLE_TYPES * 2);
+        expect(Object.values(statuses).every(v => v === 'approved')).toBe(true);
+    });
+
+    // ...and the converse, so the refresh cannot become a poll-on-every-open.
+    it('trusts a freshly-checked record without calling Meta', async () => {
+        vi.mocked(db.select).mockReturnValue(mockTemplateLookup([fresh('pending')]) as never);
+
+        await resolveTemplateStatusesByType(SENDER);
+
+        expect(whatsappService.getMessageTemplateStatus).not.toHaveBeenCalled();
     });
 });
 

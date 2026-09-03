@@ -207,10 +207,19 @@ has cost production defects before. Run in order — later rows depend on earlie
 > and `…/stats` with the merchant's own session. Record the row in the captures file the
 > same way Zid's §E rows are recorded.
 >
-> ⚠️ **SMS delivery is a separate question from ingestion.** On Zid both rows landed
+> ⛔ **The «SMS arrives» half of every pass criterion below is VOID (D-123, 2026-09-03):**
+> the SMS rail and its Vonage provider are gone and WhatsApp is the only channel. The
+> results narrated in this file are a DATED RECORD of runs made while SMS was the rail —
+> kept intact rather than rewritten, because they are the evidence of what those runs
+> proved. Read every "one customer SMS" criterion as "one customer **notification**": the
+> ingestion, dedup, grace-window and upgrade-in-place behaviour they verify is unchanged
+> and still the point. Message *arrival* now needs an approved WhatsApp template (all 8
+> production templates were still `pending` Meta review on 2026-09-03).
+>
+> ⚠️ **Delivery is a separate question from ingestion.** On Zid both rows landed
 > correctly and then failed to send with `Vonage delivery error: Quota Exceeded - rejected`
 > (an account problem, not an integration one). A `failed` row still proves 3.6/3.7's
-> webhook and dedup behaviour; only the "SMS arrives" half of the pass criteria is blocked.
+> webhook and dedup behaviour; only the arrival half of the pass criteria is blocked.
 
 >  ⚠️ **On the Salla DEMO store, measured 2026-08-23: the admin paths DO fire — and were all refused by us.**
 > First reading was wrong on two counts, both corrected the same day. (1) The storefront

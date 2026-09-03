@@ -1039,7 +1039,8 @@ an entry gate idled this work for eight days.
    → `order_delivered`, all three quoting the real invoice number. ⭐ The order came from
    the Zid admin's **manual-order wizard** (الطلبات → إنشاء), which fires `order.create`
    without the Cloudflare-challenged storefront; recipe in `docs/testing/ZID_TEST_PLAN.md`
-   §E-1. Still owed on this step: SMS *arrival* (Vonage ticket #3002710, not Zid) and the
+   §E-1. Still owed on this step: message *arrival* — over **WhatsApp** now (the SMS rail
+   was removed, D-123; it had been blocked on Vonage ticket #3002710, never on Zid) and the
    uninstall → deactivation leg (deliberately not run pre-resubmit — it disconnects the
    store).
 6. Only then: remove the `coming_soon` badge (`frontend/src/pages/integrations.tsx`),
