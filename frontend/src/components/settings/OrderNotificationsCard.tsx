@@ -24,7 +24,6 @@ import type {
   OrderNotificationType,
   NotificationTemplate,
   NotificationStats,
-  NotificationChannel,
   WhatsAppNotificationStatus,
 } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -56,7 +55,7 @@ const TYPE_ICONS: Record<OrderNotificationType, React.ComponentType<{ className?
 /* These MUST be the literal placeholder keys the backend renderer substitutes
  * (customerNotifications.renderTemplate — snake_case). The card shows them
  * verbatim for the merchant to copy into the template, so an entry here that
- * the renderer doesn't know renders as an empty string in the customer's SMS.
+ * the renderer doesn't know renders as an empty string in the message.
  * Before 2026-08-25 this list advertised camelCase aliases ({cartTotal}, …)
  * that the renderer never substituted. */
 const TYPE_VARIABLES: Record<OrderNotificationType, string[]> = {
@@ -71,9 +70,9 @@ const TYPE_VARIABLES: Record<OrderNotificationType, string[]> = {
 const DELAY_PRESETS = [0, 5, 15, 30, 60, 120, 1440];
 
 /**
- * Types that have a canonical Meta-approved WhatsApp template. The others stay
- * SMS-only, so their channel selector is not offered at all — the backend refuses
- * the switch too.
+ * Types that have a canonical Meta-approved WhatsApp template — since WhatsApp
+ * is the only delivery rail (D-123), this is also the list of types that can be
+ * delivered at all. The backend refuses a channel switch for anything else.
  *
  * ⛔ DELIBERATE DUPLICATE of `WHATSAPP_NOTIFICATION_TYPES` in `@jawab24/shared`,
  * and it must stay one. This card is reached from the PUBLIC /integrations page,
@@ -96,14 +95,14 @@ const WHATSAPP_CAPABLE_TYPES: OrderNotificationType[] = [
 /**
  * Is there any rail that can actually deliver this type today?
  *
- * SMS is dead fleet-wide (Vonage dropped by owner ruling, 2026-08-25), so a type
- * delivers only if it has a canonical Meta template. `review_request` and
- * `digital_delivery` have neither — switching them on produced nothing but
- * `failed` log rows, silently, forever.
+ * WhatsApp is the only rail (the SMS rail was retired with the Vonage provider,
+ * D-123), so a type delivers only if it has a canonical Meta template.
+ * `review_request` and `digital_delivery` have none — switching them on produced
+ * nothing but `failed` log rows, silently, forever.
  *
- * ⚠️ This encodes the Vonage ruling. The day SMS works again — or either type
- * gains a WhatsApp template — this predicate is the ONE line to revisit, and the
- * toggles come back on their own.
+ * ⚠️ The day either type gains a WhatsApp template — or a new rail is added —
+ * this predicate is the ONE line to revisit, and the toggles come back on their
+ * own.
  */
 function isDeliverable(type: OrderNotificationType): boolean {
   return WHATSAPP_CAPABLE_TYPES.includes(type);
@@ -113,12 +112,16 @@ function isDeliverable(type: OrderNotificationType): boolean {
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * No `channel` field: WhatsApp is the only delivery rail (D-123), so there is
+ * nothing to choose. The column still exists server-side for a future rail, and
+ * every row carries `whatsapp` — the card neither reads nor writes it.
+ */
 interface TemplateDraft {
   isEnabled: boolean;
   messageAr: string;
   messageEn: string;
   delayMinutes: number;
-  channel: NotificationChannel;
 }
 
 /** The draft fields edited through `handleFieldChange` (`isEnabled` has its own toggle). */
@@ -142,7 +145,6 @@ function templateToDraft(t: NotificationTemplate): TemplateDraft {
     messageAr: t.messageAr,
     messageEn: t.messageEn,
     delayMinutes: t.delayMinutes,
-    channel: t.channel === 'whatsapp' ? 'whatsapp' : 'sms',
   };
 }
 
@@ -151,8 +153,7 @@ function isDraftDirty(draft: TemplateDraft, original: TemplateDraft): boolean {
     draft.isEnabled !== original.isEnabled ||
     draft.messageAr !== original.messageAr ||
     draft.messageEn !== original.messageEn ||
-    draft.delayMinutes !== original.delayMinutes ||
-    draft.channel !== original.channel
+    draft.delayMinutes !== original.delayMinutes
   );
 }
 
@@ -179,7 +180,8 @@ function useOrderNotifications(storeId: string) {
       const [templatesRes, statsRes, waRes] = await Promise.all([
         orderNotificationsApi.getTemplates(storeId),
         orderNotificationsApi.getStats(storeId).catch(() => null),
-        // Optional: the card still works (SMS-only) if this call fails.
+        // Optional: if this call fails the card still edits copy and delays; it
+        // just cannot say where Meta's template review stands.
         orderNotificationsApi.getWhatsAppStatus(storeId).catch(() => null),
       ]);
 
@@ -189,7 +191,7 @@ function useOrderNotifications(storeId: string) {
       }
       for (const type of NOTIFICATION_TYPES) {
         if (!byType[type]) {
-          byType[type] = { isEnabled: false, messageAr: '', messageEn: '', delayMinutes: 0, channel: 'sms' };
+          byType[type] = { isEnabled: false, messageAr: '', messageEn: '', delayMinutes: 0 };
         }
       }
 
@@ -213,10 +215,9 @@ function useOrderNotifications(storeId: string) {
     setDraft({ ...draft, [type]: { ...draft[type], isEnabled: enabled } });
   };
 
-  // Generic over the field so each one keeps its own value type: `channel` only
-  // accepts a NotificationChannel, `delayMinutes` only a number. A widened
-  // `value: string | number` compiled fine but let any string through as a
-  // channel, which the backend would then 400 on.
+  // Generic over the field so each one keeps its own value type: `delayMinutes`
+  // only accepts a number, the message fields only a string. A widened
+  // `value: string | number` compiled fine but let a number through as body copy.
   const handleFieldChange = <F extends EditableField>(
     type: OrderNotificationType,
     field: F,
@@ -275,7 +276,7 @@ interface NotificationTypeRowProps {
   onToggle: (type: OrderNotificationType, enabled: boolean) => void;
   onFieldChange: <F extends EditableField>(type: OrderNotificationType, field: F, value: TemplateDraft[F]) => void;
   onExpandToggle: (type: OrderNotificationType) => void;
-  /** null while unknown (status call failed) — the channel selector then stays hidden. */
+  /** null while unknown (status call failed) — the template chip then stays hidden. */
   waStatus: WhatsAppNotificationStatus | null;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
@@ -350,43 +351,19 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
       {/* Expanded editor */}
       {isExpanded && (
         <div className="px-3 pb-3 space-y-3 border-t border-theme-border pt-3">
-          {/* Delivery channel — only for types with a canonical WhatsApp template */}
+          {/* Delivery state. There is no channel to pick — WhatsApp is the only
+              rail (D-123) — so this reports whether the store can actually send:
+              a linked WhatsApp number, and where Meta's template review stands. */}
           {WHATSAPP_CAPABLE_TYPES.includes(type) && (
             <div>
-              {/* A group of buttons, not a form control — so this is a labelled
-                  group, not a <label> (which would point at nothing). */}
-              <span
-                id={`channel-label-${type}`}
-                className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2"
-              >
+              <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
                 {t('channelLabel')}
               </span>
-              <div role="group" aria-labelledby={`channel-label-${type}`} className="flex flex-wrap items-center gap-2">
-                {(['sms', 'whatsapp'] as const)
-                  // A Zid store can never connect WhatsApp (D-117) — don't offer
-                  // the channel at all, rather than a permanently-inert button.
-                  .filter((channel) => !(channel === 'whatsapp' && waStatus?.unavailableReason === 'zid_marketplace'))
-                  .map((channel) => (
-                  <button
-                    key={channel}
-                    type="button"
-                    // No WhatsApp number linked ⇒ the option is offered but inert,
-                    // with the nudge below explaining what to do about it.
-                    disabled={!canEdit || (channel === 'whatsapp' && waStatus?.available !== true)}
-                    aria-pressed={draft.channel === channel}
-                    onClick={() => onFieldChange(type, 'channel', channel)}
-                    className={clsx(
-                      'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
-                      'disabled:opacity-50 disabled:cursor-default',
-                      draft.channel === channel
-                        ? 'bg-brand-500 text-white border-brand-600 shadow-sm'
-                        : 'bg-background text-muted-foreground border-theme-border hover:enabled:border-brand-400',
-                    )}
-                  >
-                    {t(`channels.${channel}` as 'channels.sms' | 'channels.whatsapp')}
-                  </button>
-                ))}
-                {draft.channel === 'whatsapp' && waStatus?.templates?.[type] && waStatus.templates[type] !== 'approved' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1.5 rounded-lg text-xs font-bold border bg-brand-500 text-white border-brand-600 shadow-sm">
+                  {t('channels.whatsapp')}
+                </span>
+                {waStatus?.templates?.[type] && waStatus.templates[type] !== 'approved' && (
                   <span
                     className={clsx(
                       'text-[11px] rounded-full px-2 py-0.5 border',
@@ -399,12 +376,14 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
                   </span>
                 )}
               </div>
-              {waStatus?.available === false && !waStatus?.unavailableReason && (
+              {/* A Zid store can never connect WhatsApp (D-117), so it is told
+                  the type is unavailable rather than nudged to go connect one. */}
+              {waStatus?.unavailableReason === 'zid_marketplace' ? (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">{t('whatsappUnavailableZid')}</p>
+              ) : waStatus?.available === false ? (
                 <p className="mt-1.5 text-[11px] text-muted-foreground">{t('connectWhatsAppHint')}</p>
-              )}
-              {draft.channel === 'whatsapp' && (
-                <p className="mt-1.5 text-[11px] text-muted-foreground">{t('whatsappTemplateNote')}</p>
-              )}
+              ) : null}
+              <p className="mt-1.5 text-[11px] text-muted-foreground">{t('whatsappTemplateNote')}</p>
             </div>
           )}
 
@@ -465,8 +444,8 @@ function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle
 
           {/* Delay selector */}
           <div>
-            {/* Same shape as the channel group above: buttons, so a labelled
-                group rather than a <label> with no control to point at. */}
+            {/* A group of buttons, not a form control — so a labelled group
+                rather than a <label> with no control to point at. */}
             <span
               id={`delay-label-${type}`}
               className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2"

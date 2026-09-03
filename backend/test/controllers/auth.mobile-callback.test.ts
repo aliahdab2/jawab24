@@ -14,7 +14,7 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn(),
 }));
 vi.mock('../../src/config', () => ({
-    config: { phoneAuthEnabled: false, vonage: { apiKey: '', apiSecret: '', senderId: '' } },
+    config: { phoneAuthEnabled: false },
 }));
 vi.mock('../../src/services/otp', () => ({
     otpService: { verifyOtp: vi.fn(), generateCode: vi.fn(), storeOtp: vi.fn(), sendOtp: vi.fn() },
@@ -31,7 +31,6 @@ vi.mock('../../src/services/settings', () => ({
 }));
 vi.mock('../../src/integrations', () => ({ integrationRegistry: {} }));
 vi.mock('../../src/services/auditLog', () => ({ auditLog: { log: vi.fn() } }));
-vi.mock('../../src/services/sms', () => ({ smsService: { send: vi.fn() } }));
 
 vi.mock('../../src/services/auth', () => ({
     authService: {

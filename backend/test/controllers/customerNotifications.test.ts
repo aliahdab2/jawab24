@@ -32,7 +32,10 @@ vi.mock('../../src/services/whatsappAvailability', () => ({
 }));
 vi.mock('../../src/services/whatsappNotificationSender', () => ({
     resolveWhatsAppSender: vi.fn().mockResolvedValue(null),
-    ensureTemplatesProvisioned: vi.fn(),
+    // Must resolve, not return undefined: the controller fires this
+    // fire-and-forget and attaches a .catch — a bare vi.fn() would make the
+    // channel-switch path throw a TypeError that production never does.
+    ensureTemplatesProvisioned: vi.fn().mockResolvedValue(undefined),
 }));
 
 import {
@@ -171,6 +174,47 @@ describe('updateTemplate', () => {
 
         expect(reply.status).toHaveBeenCalledWith(404);
         expect(reply.send).toHaveBeenCalledWith({ error: 'Template not found' });
+    });
+
+    // WhatsApp is the only rail (D-123). A PUT naming the retired SMS rail is
+    // refused rather than stored: accepting it would write a row whose sends can
+    // only ever fail, which is the silent-failure shape this endpoint's channel
+    // pre-flight exists to prevent.
+    it('refuses a retired sms channel without writing anything', async () => {
+        const req = makeReq(
+            { storeId: 'store-1', type: 'order_confirmed' },
+            { body: { channel: 'sms' } },
+        );
+        const reply = makeReply();
+
+        await updateTemplate(req, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(400);
+        expect(db.update).not.toHaveBeenCalled();
+        // The message must name what IS accepted — a bare "invalid" leaves an
+        // API client guessing at a value that no longer exists.
+        const sent = vi.mocked(reply.send).mock.calls[0][0] as { error: string };
+        expect(sent.error).toContain('whatsapp');
+    });
+
+    it('accepts the whatsapp channel for a WhatsApp-capable type', async () => {
+        const updated = { ...sampleTemplate, channel: 'whatsapp' };
+        vi.mocked(db.update).mockReturnValue(mockUpdateReturningChain([updated]) as never);
+        const { resolveWhatsAppSender } = await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce({
+            pageId: 'page-1', phoneNumberId: '123', wabaId: 'waba-1', accessToken: 'tok',
+        });
+
+        const req = makeReq(
+            { storeId: 'store-1', type: 'order_confirmed' },
+            { body: { channel: 'whatsapp' }, log: { error: vi.fn() } },
+        );
+        const reply = makeReply();
+
+        await updateTemplate(req, reply);
+
+        expect(reply.send).toHaveBeenCalledWith(updated);
+        expect(reply.status).not.toHaveBeenCalledWith(400);
     });
 });
 

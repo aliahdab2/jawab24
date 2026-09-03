@@ -39,8 +39,14 @@ export const WA_SEND_ERRORS = {
     templateRejected: 'whatsapp_template_rejected',
     /** The customer phone is not a dialable international number. */
     badPhone: 'invalid_customer_phone',
-    /** This notification type has no canonical WhatsApp template (SMS-only type). */
+    /** This notification type has no canonical WhatsApp template. */
     unsupportedType: 'whatsapp_type_unsupported',
+    /**
+     * The log row asks for a channel that no longer exists (the retired SMS
+     * rail, D-123). Only reachable from a row written before that retirement, or
+     * edited by hand — a retry cannot fix it, so a human must look.
+     */
+    channelUnsupported: 'channel_unsupported',
 } as const;
 
 export class WhatsAppNotificationError extends Error {

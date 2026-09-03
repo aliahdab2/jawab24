@@ -825,15 +825,14 @@ Voice-to-text for KB content via microphone:
 
 ---
 
-### Phone OTP Authentication
-- **Purpose**: Primary login method — universal identity not tied to any platform
-- **Flow**: Phone (E.164) → 6-digit OTP via SMS → bcrypt verify → JWT + refresh token
-- **OTP storage**: `otpCodes` table — bcrypt-hashed, 5-min expiry, max 3 attempts
-- **Rate limiting**: 1 OTP per phone per 60s (store-level) + 3 requests/10min (route-level)
-- **Timing attack protection**: dummy bcrypt compare when no OTP record exists
-- **Feature flag**: `PHONE_AUTH_ENABLED=true` — routes hidden until flag is on
-- **SMS delivery**: Vonage SMS API (see Vonage SMS below)
-- **Phone linking**: `POST /auth/phone/link` (authenticated) — links phone to existing Facebook users
+### Phone OTP Authentication — ❌ NOT IMPLEMENTED (no delivery transport)
+- **Status**: the code mints, stores and verifies codes; **nothing can deliver one**. Facebook OAuth is the only working login. Removed rail: Vonage SMS (D-123, 2026-09-03).
+- **Why WhatsApp does not substitute**: a code goes to someone who has connected nothing, so it needs a **Jawab24-owned WABA** — none exists, every WhatsApp send in the codebase uses a merchant's own number — plus an **AUTHENTICATION-category template**, while `createMessageTemplate` submits UTILITY only. Prerequisites: `.planning/WHATSAPP_PLAN.md`.
+- **Behaviour today**: `otpService.sendOtp` throws `OtpTransportUnavailableError`; `POST /auth/phone/request` answers **503 `otp_unavailable`**. Loud on purpose — the removed rail used to answer «sent» and deliver nothing.
+- **Kept because a WhatsApp OTP would reuse it**: `otpCodes` table (bcrypt-hashed, 5-min expiry, max 3 attempts), the 1-per-60s store-level rate limit plus 3-per-10min route limit, and the dummy bcrypt compare that keeps response time independent of whether a code is pending.
+- **Feature flag**: `PHONE_AUTH_ENABLED` (OFF everywhere) — with it off, `/auth/phone/*` is not registered at all.
+- **Sanctioned destinations**: refused in `requestOtp` before a code is minted (`isSanctionedPhone`, `@jawab24/shared`) → 400 `country_blocked`. Syria is barred from WhatsApp too (D-045), so this outlives any transport change.
+- **Phone linking**: `POST /auth/phone/link` (authenticated) — also flag-gated, since it needs a code only `requestOtp` can mint
 
 - **Implementation Location**:
   - OTP lifecycle: `/backend/src/services/otp.ts`
@@ -883,22 +882,22 @@ Voice-to-text for KB content via microphone:
 
 ---
 
-### Vonage SMS
-- **Purpose**: OTP delivery for phone authentication + e-commerce order notifications
-- **API**: Vonage SMS REST API (`https://rest.nexmo.com/sms/json`)
-- **Credentials**: `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_SENDER_ID`
-- **Coverage**: 200+ countries including Syria (+963), Saudi Arabia (+966), Turkey (+90), Sweden (+46)
-- **Development**: console.log only (no real SMS sent)
-- **Production**: live Vonage delivery — keys required
-
-- **Implementation Location**: `/backend/src/services/sms.ts`
-- **Env vars**:
-  - `VONAGE_API_KEY` — from Vonage API Settings
-  - `VONAGE_API_SECRET` — from Vonage API Settings
-  - `VONAGE_SENDER_ID` — alphanumeric sender name (default: `Jawab24`)
+### Vonage SMS — ⛔ REMOVED 2026-09-03 (D-123)
+The integration is gone: no `services/sms.ts`, no `VONAGE_*` config, no npm dependency (it was a
+~30-line `fetch` to `rest.nexmo.com`). Kept here only so the history is readable.
+- **Why**: the account was never verified (support ticket #3002710 auto-closed), so every send was
+  rejected «Quota Exceeded». The owner dropped the path on 2026-08-25 rather than appeal, because
+  KSA SMS costs €0.172/message against ~$0.011 for a WhatsApp utility template.
+- **⛔ The old claim "Coverage: 200+ countries including Syria (+963)" was WRONG** — Syria is
+  sanctions-blocked and always was; the sender ID was never registered with the Saudi regulator either.
+- **What replaced it**: customer notifications go over WhatsApp only (below). Team invites are
+  email-only. Phone-OTP login has no transport (above).
+- **If SMS is ever wanted back** it is a NEW integration with a local CST-registered Saudi route
+  (~€0.016/message), not a revival of this one.
 
 ### E-commerce Order Notifications
-- **Purpose**: Automated SMS to customers for order lifecycle events (confirmed, shipped, delivered, abandoned cart, review request)
+- **Purpose**: Automated WhatsApp messages to customers for order lifecycle events (confirmed, shipped, delivered, abandoned cart)
+- **Channel**: WhatsApp ONLY (D-123) — a Meta-approved UTILITY template sent from the WhatsApp page linked to that store. `customer_notification_templates.channel` accepts `whatsapp` alone; a row naming the retired rail fails with `channel_unsupported` rather than being re-routed.
 - **Platforms**: Salla, Shopify, Zid — driven by existing webhook handlers
 - **Queue**: BullMQ `customer-notifications` queue, concurrency 10, rate limit 50/min, exponential backoff (3 retries)
 - **Deduplication**: `platformEventId` = `${platform}:${type}:${orderId}` — prevents double-sends on webhook retries
@@ -1168,7 +1167,7 @@ All webhooks use HMAC-SHA256 signature verification:
 
 ### Resend Email Service
 - **Purpose**: Transactional emails — waitlist notifications, subscription welcome, **trial-ending reminders**, lead digests, account notices, and **team invites**. Email kinds are the `EmailType` union in `email.ts`: `lead_digest | waitlist | transactional | subscription_welcome | trial_ending | invite | account_notice`.
-- **Team invites**: `workspaceInviteService.createInvite()` sends the invite via email (for email contacts) or SMS (for phone contacts). The invite email is **bilingual** (Arabic + English in one message, since the recipient's language is unknown) and links to `/invites/accept?token=…`. If the email send fails, the API returns the raw token so the UI can fall back to a copy-and-share link. Template: `inviteEmailTemplate()` in `emailTemplates.ts`.
+- **Team invites**: `workspaceInviteService.createInvite()` sends the invite by email, and **refuses a phone contact** with `InvalidInviteContactError` → 400 `email_required` (D-123 — a phone invite lost its only transport with the SMS rail; the rule was client-side only until 2026-09-03). The invite email is **bilingual** (Arabic + English in one message, since the recipient's language is unknown) and links to `/invites/accept?token=…`. If the email send fails, the API returns the raw token so the UI can fall back to a copy-and-share link. Template: `inviteEmailTemplate()` in `emailTemplates.ts`.
 - **API**: Resend REST API (`https://api.resend.com/emails`) via native `fetch` (no SDK)
 - **From**: `info@jawab24.com` (configurable via `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME`)
 - **Reply-To**: `RESEND_REPLY_TO` when set, otherwise the key is omitted from the request and Resend defaults to the From address. The same resolved address is printed in the shared footer, so what a merchant reads and where a reply lands cannot diverge.

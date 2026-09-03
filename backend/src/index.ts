@@ -72,7 +72,6 @@ import { setTrialRemindersLogger, runTrialEndingReminders, runTrialEndedNotices 
 import { setDunningNoticesLogger, runDunningNotices } from "./services/dunningNotices";
 import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
-import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
 import { createRequestLogger } from "./types";
 import { installGraphRetryObserver } from "./lib/graphRetryMetrics";
@@ -386,7 +385,6 @@ const start = async () => {
 
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     setEscalationLogger(workerLogger);
-    smsService.setLogger(workerLogger);
     emailService.setLogger(workerLogger);
     startEscalationCron();
 

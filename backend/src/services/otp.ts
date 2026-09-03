@@ -4,7 +4,6 @@ import { db } from '../db';
 import { otpCodes } from '../db/schema';
 import { eq, and, gt, lt } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
-import { smsService } from './sms';
 
 const BCRYPT_ROUNDS = 10;
 const OTP_EXPIRY_MINUTES = 5;
@@ -103,15 +102,27 @@ export class OtpService {
         return 'valid';
     }
 
-    async sendOtp(phone: string, code: string, locale?: string): Promise<void> {
-        // Trailing line enables Web OTP API autofill on Android (Chrome WebView 91+).
-        // Format required: @<domain> #<code> — must be the last line of the SMS.
-        const body = locale === 'en'
-            ? `Jawab24: Your verification code is ${code}. Valid for ${OTP_EXPIRY_MINUTES} minutes.`
-            : `جواب24: رمز التحقق ${code}. صالح ${OTP_EXPIRY_MINUTES} دقائق`;
-        // Blank line visually separates the human-readable body from the Web OTP origin line.
-        const message = `${body}\n\n@app.jawab24.com #${code}`;
-        await smsService.send(phone, message);
+    /**
+     * Deliver a code to a phone — ❌ NO TRANSPORT EXISTS TODAY.
+     *
+     * The SMS rail was retired with the Vonage provider (D-123), and WhatsApp
+     * cannot replace it here: a verification code goes to someone who has
+     * connected nothing yet, so it must be sent from a Jawab24-owned WhatsApp
+     * Business Account, and there is none (every WhatsApp send in this codebase
+     * uses a merchant's own number). Meta also requires an AUTHENTICATION-category
+     * template, while `whatsappService.createMessageTemplate` submits UTILITY only.
+     *
+     * This throws rather than returning quietly, because a silent success here
+     * would let the caller answer «code sent» to a user who will never receive
+     * one — exactly the failure the retired rail used to produce.
+     *
+     * ⚠️ The rest of this service (generate / store / verify, `otp_codes`) is
+     * transport-agnostic and deliberately kept: it is what a WhatsApp OTP would
+     * reuse. The prerequisites for that are in `.planning/WHATSAPP_PLAN.md`.
+     * Callers reach here only when `PHONE_AUTH_ENABLED` is on, which it is not.
+     */
+    async sendOtp(phone: string, _code: string, _locale?: string): Promise<void> {
+        throw new OtpTransportUnavailableError(phone);
     }
 
     async cleanupExpired(): Promise<void> {
@@ -127,6 +138,18 @@ export class OtpRateLimitError extends Error {
     constructor() {
         super('OTP rate limit: please wait before requesting a new code');
         this.name = 'OtpRateLimitError';
+    }
+}
+
+/**
+ * No channel can carry a verification code to this phone. Distinct from a
+ * sanctions block (which is about the destination): this says the PLATFORM has
+ * no verification transport at all — see `OtpService.sendOtp`.
+ */
+export class OtpTransportUnavailableError extends Error {
+    constructor(phone: string) {
+        super(`No verification transport is configured (cannot deliver a code to ${phone})`);
+        this.name = 'OtpTransportUnavailableError';
     }
 }
 

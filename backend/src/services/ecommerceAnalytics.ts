@@ -17,7 +17,7 @@ import { customerNotificationsLog, messages, pages } from '../db/schema';
 export type AnalyticsRange = '30d' | '90d';
 
 /** Notification delivery counters — channel-agnostic. Same shape applies to
- *  SMS (today), WhatsApp Cloud API (planned), and DM follow-ups (Step 3). */
+ *  WhatsApp Cloud API (today, the only rail — D-123) and DM follow-ups (Step 3). */
 export interface NotificationFunnel {
     sent: number;
     delivered: number;
@@ -26,7 +26,7 @@ export interface NotificationFunnel {
 }
 
 /** Per-channel + total funnel, so the UI can render a unified view today
- *  (one channel) and a per-channel breakdown later (WhatsApp + SMS + DM). */
+ *  (one channel) and a per-channel breakdown later (WhatsApp + DM). */
 export interface ChannelFunnel {
     total: NotificationFunnel;
     byChannel: Record<string, NotificationFunnel>;
@@ -107,7 +107,7 @@ export function emptyFunnel(): NotificationFunnel {
 }
 
 /** Normalize a status value into the funnel's bucket. The pipeline historically
- *  used 'sent' for delivered SMS — collapse it into `delivered` so the UI shows
+ *  used 'sent' for a delivered message — collapse it into `delivered` so the UI shows
  *  one number, not two. Unknown statuses fall through to `pending`. */
 export function bucketForStatus(status: string | null): keyof NotificationFunnel {
     if (status === 'delivered' || status === 'sent') return 'delivered';
@@ -177,7 +177,7 @@ async function queryNotificationsByType(storeId: string, since: Date): Promise<N
  * Replaces an earlier N+1 loop that issued one query per abandoned cart.
  *
  * Limitations:
- *  - Customer may have ordered independently of the SMS — over-credits us
+ *  - Customer may have ordered independently of the notification — over-credits us
  *  - Phone-only match misses customers who used a different phone at checkout
  *  - cartTotal is stored as varchar (currency mixed) — sum is best-effort
  */

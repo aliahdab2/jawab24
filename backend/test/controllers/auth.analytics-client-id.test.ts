@@ -26,7 +26,7 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn(),
 }));
 vi.mock('../../src/config', () => ({
-    config: { phoneAuthEnabled: true, vonage: { apiKey: '', apiSecret: '', senderId: '' } },
+    config: { phoneAuthEnabled: true },
 }));
 
 const { storeGaClientIdFirstTouchMock, replayMock, captureErrorMock } = vi.hoisted(() => ({
@@ -52,7 +52,6 @@ vi.mock('../../src/services/settings', () => ({ settingsService: {} }));
 vi.mock('../../src/integrations', () => ({ integrationRegistry: {} }));
 vi.mock('../../src/services/auditLog', () => ({ auditLog: { log: vi.fn() } }));
 vi.mock('../../src/services/workspace', () => ({ workspaceService: {} }));
-vi.mock('../../src/services/sms', () => ({ smsService: { send: vi.fn() } }));
 
 import { AuthController } from '../../src/controllers/auth';
 

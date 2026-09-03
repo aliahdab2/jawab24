@@ -26,7 +26,6 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('../../src/config', () => ({
     config: {
         phoneAuthEnabled: true,
-        vonage: { apiKey: '', apiSecret: '', senderId: '' },
         adminEmails: [],
     },
 }));

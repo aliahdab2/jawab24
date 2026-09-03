@@ -30,7 +30,6 @@ vi.mock('../../src/services/refreshToken', () => ({
     refreshTokenService: { createRefreshToken: vi.fn() },
 }));
 vi.mock('../../src/services/otp', () => ({ otpService: {} }));
-vi.mock('../../src/services/sms', () => ({ smsService: {} }));
 vi.mock('../../src/services/settings', () => ({ settingsService: {} }));
 vi.mock('../../src/services/auditLog', () => ({ auditLogService: { record: vi.fn() } }));
 vi.mock('../../src/integrations', () => ({}));

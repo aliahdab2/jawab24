@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
  * Compact KPI tile for analytics dashboards.
  *
  * Reused across the e-commerce analytics page and (later) the integrations
- * summary widget. Channel-agnostic — same shape for SMS / WhatsApp / DM stats.
+ * summary widget. Channel-agnostic — same shape for WhatsApp / DM stats.
  */
 export interface KpiCardProps {
     label: string;

@@ -46,7 +46,6 @@ vi.mock('../../src/config', () => ({
     config: {
         demo: { enabled: false, userFacebookId: 'fb_demo' },
         phoneAuthEnabled: false,
-        vonage: { apiKey: '', apiSecret: '', senderId: '' },
     },
 }));
 

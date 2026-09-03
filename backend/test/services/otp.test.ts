@@ -17,16 +17,9 @@ vi.mock('bcrypt', () => ({
     },
 }));
 
-vi.mock('../../src/services/sms', () => ({
-    smsService: {
-        send: vi.fn().mockResolvedValue(undefined),
-    },
-}));
-
-import { OtpService, OtpRateLimitError } from '../../src/services/otp';
+import { OtpService, OtpRateLimitError, OtpTransportUnavailableError } from '../../src/services/otp';
 import { db } from '../../src/db';
 import bcrypt from 'bcrypt';
-import { smsService } from '../../src/services/sms';
 
 // ─── Helper: build a chainable query mock ────────────────────────────────────
 
@@ -233,41 +226,34 @@ describe('OtpService', () => {
 
     // ── sendOtp ───────────────────────────────────────────────────────────────
 
+    /**
+     * There is NO verification transport (D-123): the SMS rail retired with the
+     * Vonage provider, and WhatsApp OTP needs a Jawab24-owned WABA plus an
+     * AUTHENTICATION-category template, neither of which exists.
+     *
+     * What these cases pin is that the absence is LOUD. A `sendOtp` that
+     * resolved quietly would let the controller answer «code sent» to someone
+     * who will never receive one — the exact failure shape the dead SMS rail
+     * used to produce, and the reason it was removed rather than left in place.
+     */
     describe('sendOtp', () => {
-        it('sends Arabic message by default', async () => {
-            await service.sendOtp('+966500000001', '123456');
-
-            expect(smsService.send).toHaveBeenCalledWith(
-                '+966500000001',
-                expect.stringContaining('رمز التحقق'),
-            );
+        it('throws instead of pretending a code was delivered', async () => {
+            await expect(service.sendOtp('+966500000001', '123456'))
+                .rejects.toBeInstanceOf(OtpTransportUnavailableError);
         });
 
-        it('sends Arabic message when locale is ar', async () => {
-            await service.sendOtp('+966500000001', '123456', 'ar');
-
-            expect(smsService.send).toHaveBeenCalledWith(
-                '+966500000001',
-                expect.stringContaining('رمز التحقق'),
-            );
+        it('throws for every locale — no transport is locale-specific', async () => {
+            await expect(service.sendOtp('+966500000001', '123456', 'ar')).rejects.toThrow();
+            await expect(service.sendOtp('+966500000001', '123456', 'en')).rejects.toThrow();
         });
 
-        it('sends English message when locale is en', async () => {
-            await service.sendOtp('+966500000001', '123456', 'en');
+        it('names the destination in the error, and never the code', async () => {
+            const error = await service.sendOtp('+966500000001', '123456').catch((e: Error) => e);
 
-            expect(smsService.send).toHaveBeenCalledWith(
-                '+966500000001',
-                expect.stringContaining('Your verification code is 123456'),
-            );
-        });
-
-        it('includes Web OTP origin line matching Capacitor hostname', async () => {
-            await service.sendOtp('+966500000001', '123456', 'en');
-
-            expect(smsService.send).toHaveBeenCalledWith(
-                '+966500000001',
-                expect.stringContaining('@app.jawab24.com #123456'),
-            );
+            expect((error as Error).message).toContain('+966500000001');
+            // A verification code must not reach logs or Sentry through an
+            // error message — this is the one place it could have leaked.
+            expect((error as Error).message).not.toContain('123456');
         });
     });
 

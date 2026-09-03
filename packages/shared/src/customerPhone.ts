@@ -9,7 +9,7 @@
  * `contacts[].wa_id` / `messages[].from` are digits-only international numbers
  * with no `+`, no spaces and no separators (e.g. `966501234567`). Order webhooks
  * hand us the same number in looser shapes, so normalize once, here, instead of
- * at each send site (the SMS path does its own `+`-strip in `sms.ts` for Vonage).
+ * at each send site.
  */
 
 /** Arabic-Indic and Extended Arabic-Indic digits → ASCII. Order matters: index = value. */

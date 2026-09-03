@@ -2014,7 +2014,11 @@ export const customerNotificationTemplates = pgTable('customer_notification_temp
     ecommerceStoreId: uuid('ecommerce_store_id').notNull().references(() => ecommerceStores.id, { onDelete: 'cascade' }),
     notificationType: varchar('notification_type', { length: 50 }).notNull(),
     // Types: 'abandoned_cart' | 'order_confirmed' | 'order_shipped' | 'order_delivered' | 'review_request' | 'digital_delivery'
-    channel: varchar('channel', { length: 20 }).notNull().default('sms'),
+    // 'whatsapp' is the only rail (D-123 — the SMS rail retired with Vonage).
+    // Kept as a column, not collapsed away: the log groups the analytics funnel
+    // by it, and it is the seat for a future rail (a local CST-registered SMS
+    // route, a DM follow-up) without another migration.
+    channel: varchar('channel', { length: 20 }).notNull().default('whatsapp'),
     messageAr: text('message_ar').notNull(),
     messageEn: text('message_en').notNull(),
     isEnabled: boolean('is_enabled').default(false),

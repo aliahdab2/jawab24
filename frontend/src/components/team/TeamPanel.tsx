@@ -157,33 +157,30 @@ export function TeamPanel() {
   };
 
   const processInviteResponse = (
-    res: { data?: { token?: string; smsSent?: boolean; emailSent?: boolean } },
+    res: { data?: { token?: string; emailSent?: boolean } },
     contactValue: string,
     isResend: boolean,
   ) => {
     const token = res.data?.token;
-    const smsSent = res.data?.smsSent;
     const emailSent = res.data?.emailSent;
-    const delivered = smsSent || emailSent;
-    // The invite is delivered automatically by email (or SMS). The copy-link
-    // is the manual fallback — show it only when no channel actually
-    // delivered (e.g. email provider down), and clear any stale link when a
-    // resend does go out via a channel.
-    if (token && !delivered) {
+    // The invite is delivered automatically by email. The copy-link is the
+    // manual fallback — show it only when the email did not actually go out
+    // (e.g. provider down), and clear any stale link when a resend does.
+    if (token && !emailSent) {
       showInviteLink(token, contactValue);
-    } else if (delivered) {
+    } else if (emailSent) {
       setInviteLink(null);
     }
     const key = isResend
-      ? (smsSent ? 'inviteResentSms' : emailSent ? 'inviteResentEmail' : 'inviteResent')
-      : (smsSent ? 'inviteSentSms' : emailSent ? 'inviteSentEmail' : 'inviteSent');
+      ? (emailSent ? 'inviteResentEmail' : 'inviteResent')
+      : (emailSent ? 'inviteSentEmail' : 'inviteSent');
     toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
   };
 
   const handleInvite = async () => {
     const trimmed = contact.trim().toLowerCase();
-    // Email-only invites: SMS can't reach our markets (Syria/KSA/Libya), so phone
-    // invites are retired until a WhatsApp-based flow replaces them.
+    // Email-only invites, and the backend enforces the same rule (D-123): a
+    // phone invite had no transport once the SMS rail was retired.
     if (!trimmed || !isValidEmail(trimmed)) {
       toast.error(t('invalidContact'));
       return;

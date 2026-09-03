@@ -40,7 +40,10 @@ const ANALYTICS_PAYLOAD_30D = {
     notifications: {
         funnel: {
             total: { sent: 0, delivered: 47, failed: 3, pending: 1 },
-            byChannel: { sms: { sent: 0, delivered: 47, failed: 3, pending: 1 } },
+            // The channel key must be one production can actually produce.
+            // WhatsApp is the only rail (D-123), so a fixture keyed `sms` would
+            // exercise a shape the API can no longer return.
+            byChannel: { whatsapp: { sent: 0, delivered: 47, failed: 3, pending: 1 } },
         },
         byType: {
             abandoned_cart: 12,

@@ -3,25 +3,38 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaceInvites, users } from '../db/schema';
 import { workspaceService } from './workspace';
-import { smsService } from './sms';
 import { emailService } from './email';
 import { inviteEmailTemplate } from '../utils/emailTemplates';
-import { detectContactType, isArabicPhone } from '@jawab24/shared';
+import { detectContactType } from '@jawab24/shared';
 import type { WorkspaceRole } from '@jawab24/shared';
 import { config } from '../config';
-import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
 import { sha256Hex } from '../utils/hash';
 
 /** Invite expiry: 48 hours */
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 
+/**
+ * The invite contact is not an email address. Team invites are email-only —
+ * a phone invite had no transport left once the SMS rail was retired (D-123).
+ */
+export class InvalidInviteContactError extends Error {
+    constructor() {
+        super('Team invites require an email address');
+        this.name = 'InvalidInviteContactError';
+    }
+}
+
 export class WorkspaceInviteService {
     /**
-     * Create an invite for a workspace.
-     * `contact` can be an email address or an E.164 phone number (+966xxxxxxxxx).
+     * Create an invite for a workspace. `contact` must be an EMAIL address.
      * Returns the raw token (for the invite URL) and the invite record.
-     * For phone invites, sends the invite link via SMS.
+     *
+     * Phone invites are refused: their only transport was SMS, retired with the
+     * Vonage provider (D-123). The dashboard has rejected phone contacts since
+     * #233, but only client-side — an API client could still create an invite
+     * whose link was guaranteed never to arrive. The rule now lives on the
+     * server, where it is actually enforced.
      */
     async createInvite(
         workspaceId: string,
@@ -29,9 +42,13 @@ export class WorkspaceInviteService {
         role: WorkspaceRole = 'member',
         createdBy: string,
     ) {
+        const { email, phone } = detectContactType(contact);
+        if (phone || !email) {
+            throw new InvalidInviteContactError();
+        }
+
         const rawToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = sha256Hex(rawToken);
-        const { email, phone } = detectContactType(contact);
 
         // Upsert: if an invite already exists for this contact+workspace, update it
         // (handles re-inviting after expiry/revocation)
@@ -41,9 +58,7 @@ export class WorkspaceInviteService {
             .where(
                 and(
                     eq(workspaceInvites.workspaceId, workspaceId),
-                    phone
-                        ? eq(workspaceInvites.phone, phone)
-                        : eq(workspaceInvites.email, email ?? ''),
+                    eq(workspaceInvites.email, email),
                 )
             )
             .limit(1);
@@ -69,7 +84,6 @@ export class WorkspaceInviteService {
                 .values({
                     workspaceId,
                     email,
-                    phone,
                     tokenHash,
                     role,
                     status: 'pending',
@@ -82,44 +96,26 @@ export class WorkspaceInviteService {
         const inviteUrl = new URL('/invites/accept', config.frontendUrl);
         inviteUrl.searchParams.set('token', rawToken);
 
-        // Send SMS for phone invites — awaited so we can report delivery status
-        let smsSent = false;
-        if (phone) {
-            const lang = isArabicPhone(phone) ? 'ar' : 'en';
-            const message = t('inviteSms', lang, { link: inviteUrl.toString() });
-            try {
-                await smsService.send(phone, message);
-                smsSent = true;
-            } catch (err) {
-                captureError(err, 'Failed to send invite SMS', {
-                    tags: { context: 'workspace' },
-                });
-            }
-        }
-
-        // Send email for email invites — awaited so we can report delivery
-        // status. When this fails (provider down, bounce at send time), the
-        // controller still returns the raw token so the UI can fall back to the
-        // copy-and-share link. The email_sends audit row is written by the
-        // email service for both success and failure.
+        // Awaited so we can report delivery status. When this fails (provider
+        // down, bounce at send time), the controller still returns the raw token
+        // so the UI can fall back to the copy-and-share link. The email_sends
+        // audit row is written by the email service for both success and failure.
         let emailSent = false;
-        if (email) {
-            const workspace = await workspaceService.getWorkspace(workspaceId);
-            const { subject, html } = inviteEmailTemplate({
-                workspaceName: workspace?.name ?? 'Jawab24',
-                inviteUrl: inviteUrl.toString(),
+        const workspace = await workspaceService.getWorkspace(workspaceId);
+        const { subject, html } = inviteEmailTemplate({
+            workspaceName: workspace?.name ?? 'Jawab24',
+            inviteUrl: inviteUrl.toString(),
+        });
+        try {
+            const result = await emailService.send({ to: email, subject, html, type: 'invite' });
+            emailSent = result.success;
+        } catch (err) {
+            captureError(err, 'Failed to send invite email', {
+                tags: { context: 'workspace' },
             });
-            try {
-                const result = await emailService.send({ to: email, subject, html, type: 'invite' });
-                emailSent = result.success;
-            } catch (err) {
-                captureError(err, 'Failed to send invite email', {
-                    tags: { context: 'workspace' },
-                });
-            }
         }
 
-        return { invite, rawToken, smsSent, emailSent };
+        return { invite, rawToken, emailSent };
     }
 
     /**

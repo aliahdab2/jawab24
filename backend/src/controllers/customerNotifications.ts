@@ -29,9 +29,16 @@ const VALID_NOTIFICATION_TYPES = new Set([
     'abandoned_cart', 'order_confirmed', 'order_shipped',
     'order_delivered', 'review_request', 'digital_delivery',
 ]);
-const MAX_MESSAGE_LENGTH = 1600; // 10 SMS segments
-/** Delivery rails a merchant may pick per notification type. */
-const VALID_CHANNELS = new Set(['sms', 'whatsapp']);
+const MAX_MESSAGE_LENGTH = 1600;
+/**
+ * Delivery rails a merchant may pick per notification type.
+ *
+ * WhatsApp is the only one: the SMS rail was retired with the Vonage provider
+ * (D-123). The set is kept rather than inlined because `channel` remains the
+ * seat for any future rail, and a PUT naming a retired one must be refused with
+ * a message that lists what IS accepted.
+ */
+const VALID_CHANNELS = new Set(['whatsapp']);
 
 /** PUT /api/notification-templates/:storeId/:type */
 export async function updateTemplate(request: FastifyRequest, reply: FastifyReply) {
