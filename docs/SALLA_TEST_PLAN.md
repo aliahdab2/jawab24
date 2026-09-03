@@ -4,8 +4,11 @@
 > Companion to `SALLA_SUBMISSION_RUNBOOK.md` (the *execution* checklist — what to flip, in
 > what order). This file answers "what must be green, and how do I prove it".
 >
-> **Current state: APPROVED by Salla, NOT yet published.** Tier 3 is the gate standing
-> between here and a public listing. Tier 0 must pass before Tier 3 means anything.
+> **Current state (corrected 2026-09-03): NEVER SUBMITTED — the app is a Development-status
+> draft on the portal; nothing was ever approved.** (An earlier revision of this line said
+> "APPROVED by Salla" — that confused the 2026-08-10 partner ID/payout verification with an app
+> review; see `SALLA_SUBMISSION_RUNBOOK.md` STATUS.) Tier 3 is the gate standing between here
+> and Submit. Tier 0 must pass before Tier 3 means anything.
 >
 > Last full Tier-1/2 run: **2026-07-19**. Counts refreshed **2026-08-17** (PR #798).
 
@@ -153,6 +156,26 @@ condition that exposed the hydration race below.
 
 Requires a **real Salla store** and a **real order**. Nothing here is simulable; every row
 has cost production defects before. Run in order — later rows depend on earlier state.
+
+> ### ⛔ The review account also carries the Zid demo — Salla needs its OWN page (2026-09-03)
+>
+> Store context is **page-scoped**: `pages.ecommerce_store_id` is a single FK, so every reply
+> and every order tool on a page reads exactly one store. The review account
+> (`ahdabeslov@gmail.com`) has one page, «Jawab24 Test», and it is linked to the Zid demo
+> store (`h47p59.zid.store`) for the Zid relaunch review. Rows 3.4 and the Service Trial
+> therefore need a **second page** linked to the Salla store.
+>
+> ⛔ In the Salla onboarding "Connect Facebook Page" step, select only that new page. The
+> step lists every workspace page with no "already linked" marker, and
+> `services/ecommerce.ts:linkStoreToPage` rebinds **silently** — choosing «Jawab24 Test»
+> would steal it from Zid mid-review with no warning. Verify after linking:
+> `SELECT name, ecommerce_store_id FROM pages WHERE workspace_id = …` shows each page on its
+> own store.
+>
+> ⚠️ **Reconcile silence is NOT evidence the billing gate is off.** `SallaBillingReconcile`
+> logs only when `scanned > 0`; with no active non-demo Salla store it runs silently every
+> 6 h and looks identical to "not scheduled". Check `ecommerce_stores` before reading the
+> logs (this is exactly how the deleted review store went unnoticed 08-23 → 08-30).
 
 > ### ⭐ You do not need a NEW purchase to reach 3.6–3.8 — an EXISTING order is enough
 >
@@ -418,6 +441,36 @@ chrome-real; every timestamp below is UTC and was verified at the read path
   (client id/secret/webhook secret in `env/backend.env`, `--force-recreate`, nginx
   reload — same procedure as the 08-20 repoint) + re-adding the Store Events list
   (Tier 0.10) on the new app.
+
+## Results — 2026-08-30 → 2026-09-03 (billing rail armed; review store found DELETED)
+
+- **3.11 prerequisite ✅ 2026-08-30 20:44 UTC** — owner set `SALLA_APP_ID=665811310` in
+  `env/backend.env` and recreated `backend-blue`; verified **inside the container** (booleans
+  only, no values printed): `appId ✓ clientId ✓ SALLA_EASY_MODE_CLAIM_ENABLED ✓`. Re-verified
+  2026-09-03 after the 09-02 deploy (`2e9ed20e`) — the vars survive redeploys.
+- **The rail is armed but `scanned = 0`.** The initial sweep (3 min after boot) logged nothing.
+  Cause, established at the read path and not from the logs: the review store row
+  `ecommerce_stores c2d5cf9e-…` (demostore.salla.sa/dev-jkgsyu3w6pzzfrzw, claimed 2026-08-23
+  07:12) **no longer exists**; the only Salla row is the demo-seeder fixture `gulf-fashion.salla.sa`
+  (`platformData.demo = true`, filtered by `isDemoStore`). A second `app.store.authorize` push
+  for the same merchant (`pending_ecommerce_installs a0f39b60-…`, created 2026-08-23 **21:30**,
+  i.e. the app was reauthorized/reinstalled during that evening's webhook-signature session)
+  sat unclaimed and expired 2026-08-30 21:30. **So every ✅ in the 08-23/08-24/08-25 results
+  below describes a store that is no longer connected**; the passes stand as evidence of the
+  code paths, but the live fixture must be rebuilt (Reauthorize App → claim) before 3.9–3.11
+  and before the Service Trial credentials are handed to Salla.
+- **Why the row vanished (established 2026-09-03, read path):** `users` holds two rows for
+  `ahdabeslov@gmail.com` — `90ada306-…` (created **2026-08-31**, carries the Facebook id, owns the
+  Zid demo store + «Jawab24 Test») and an empty `fff98a56-…` (created 2026-08-30, no Facebook
+  id). The review user that claimed the Salla store on 08-23 no longer exists.
+  `ecommerce_stores.user_id` is `ON DELETE CASCADE`, so the store row went with it — consistent
+  with the review account being recreated during the Zid Facebook-identity reconciliation
+  (08-30/31), and with the absence of any `app.uninstalled` delivery. Not a Salla-side event.
+  ⇒ Any future account surgery on the review identity takes the Salla store (and the Service
+  Trial fixture) with it — re-check `ecommerce_stores` after touching `users`.
+- ⏭ **3.11.1 runs at the claim**: the post-claim hook is the first `syncSallaBilling` — read the
+  result from the backend logs / Sentry right after «اربط هذا المتجر», not from the next cron.
+- 3.9–3.11 not reached.
 
 ## Results — 2026-08-23 (production app `665811310`, demo store `2108580704`)
 

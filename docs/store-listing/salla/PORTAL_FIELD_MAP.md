@@ -277,12 +277,24 @@ Needed: Notification Email, Submission Email, Support Email, Support Phone, Priv
   is Saudi. Error text when empty: `FAQ URL: Invalid url`.
 - `Support Phone` — confirmed **optional** (no star). Leave empty; ⛔ do not invent a number.
 
-- **Support email — recommend `support@jawab24.com`** for all three fields (notification,
-  submission, support). The brief §7 left this `[TBD]` between that and a routed
-  `salla-support@jawab24.com`; a per-platform alias buys queue routing we do not need at zero
-  installs, and it is one more inbox to forget to monitor. Route by tag inside one inbox instead.
-  ⛔ Whichever is chosen must be a **real, monitored inbox with an auto-responder** before
-  submission — the reviewer may test it, and an unanswered support address is a rejection reason.
+- ✅ **Support email — `support@jawab24.com`, SETTLED 2026-09-03 (owner).** Use it for all three
+  fields (notification, submission, support). The brief §7 left this `[TBD]` between that and a
+  routed `salla-support@jawab24.com`; a per-platform alias buys queue routing we do not need at
+  zero installs, and it is one more inbox to forget to monitor. Route by tag inside one inbox.
+  **Deliverability verified 2026-09-03 against the live DNS**, not assumed: `jawab24.com` publishes
+  five `eforward{1..5}.registrar-servers.com` MX records (Namecheap email forwarding) and
+  `v=spf1 include:spf.efwd.registrar-servers.com ~all`; the owner confirms the `support@` alias
+  forwards to a monitored personal inbox. ⚠️ The absent-MX note in the deliverability audit is
+  about **`send.jawab24.com`** (the SES bounce-feedback record) — a different record, and unrelated
+  to whether support mail arrives.
+  ⛔⭐ **Two gaps forwarding does NOT close — both still open at submission time:**
+  (a) **no auto-responder.** Namecheap forwarding has none, and a Gmail vacation responder fires on
+  *all* mail to the destination account and answers *from* that personal address — which would
+  expose it to the reviewer. An unanswered support address is a rejection reason, so this needs a
+  real answer before Submit, not a forward.
+  (b) **receive-only.** No `Send mail as` alias exists, so nothing can be sent *from* support@;
+  relatedly `RESEND_REPLY_TO` is still unset in prod, so merchant-email footers print
+  `info@jawab24.com`. Neither blocks Save Draft.
 - ✅ **Privacy Policy URL — `https://jawab24.com/privacy`, ready to paste.**
   ⚠️ An earlier version of this file said the page carried "zero Salla/processor content" and had to
   be rewritten first. **That was wrong** — it repeated the brief's 2026-05-07 gap analysis without
@@ -299,6 +311,29 @@ uses these to exercise the app.
 
 Owed: a **dedicated review account** on jawab24.com with a connected Salla demo store and synced
 products. ⛔ Do not hand over a real merchant's account, and do not use the founder's own.
+
+**Decided 2026-09-03 (owner OK pending):** the review account is `ahdabeslov@gmail.com`
+(«Mohammad Jamal») — the Facebook review identity already shared with Meta and Apple review.
+Jawab24 has **no password login** (Facebook / phone-OTP / demo mode), so *Test Username* = that
+email, *Test Password* = the Facebook account's password, and the instructions must say
+«سجّل الدخول عبر فيسبوك». A phone-OTP account cannot serve a reviewer.
+
+⚠️ **This account also carries the Zid demo.** Its page «Jawab24 Test» is linked to the Zid demo
+store, so the Salla store gets a **second** page (created on the same Facebook account) — and the
+instructions must name that page for the smart-reply test. ⛔ Never re-link «Jawab24 Test».
+
+🔴 **Step 1 of the instructions below is currently FALSE for the reviewer (found 2026-09-03):**
+the «المتاجر» page (`/integrations`) is **admin-only** — `frontend/src/pages/integrations.tsx`
+redirects any non-admin to `/dashboard` ("while we finish public roll-out"). Making the review
+account an admin is not acceptable (admins see every real merchant). **Resolved 2026-09-03 by
+rewriting the instructions around `/salla/onboarding`** (auth-only, not admin-gated — verified;
+its step 1 shows «تم ربط المتجر» + store name and triggers a product sync, then reports
+«تمت مزامنة N منتج»). Lifting the admin gate was considered and **deferred: Zid app 7367 is under
+review, and opening `/integrations` would expose Zid's Connect button to every merchant mid-review.**
+Revisit after the Zid verdict (together with server-side capabilities gating for Zid/Shopify).
+⚠️ The wizard's next step lists every page with a Link button and rebinds silently — the
+instructions must tell the reviewer to stop after the sync line and NOT press «ربط صفحة».
+Re-verify steps 1–3 **as the review account, in production** before submitting.
 
 ⭐ **Measured 2026-08-20 — and it overturned a prediction worth recording.** All four fields carry a
 required star, from which it was inferred that the draft could not be saved until the reviewer
@@ -319,11 +354,14 @@ read which fields the validator actually names, rather than inferring the blocki
 
 بعد تسجيل الدخول بالبيانات أعلاه:
 
-1. من القائمة الجانبية اختر «المتاجر» — ستجد المتجر التجريبي مرتبطاً، مع عدد المنتجات
-   المزامنة وتاريخ آخر مزامنة.
-2. اضغط «مزامنة المنتجات» للتأكد من قراءة المنتجات والأسعار مباشرةً من سلة.
-3. من صفحة «الإعدادات» افتح «اختبار الرد الذكي» واكتب سؤالاً مثل: «كم سعر ...؟»
-   — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي من كتالوج المتجر.
+1. افتح الرابط https://jawab24.com/salla/onboarding ثم اضغط «ابدأ» — ستظهر رسالة
+   «تم ربط المتجر» مع اسم المتجر التجريبي، وتبدأ مزامنة المنتجات تلقائياً حتى تظهر
+   «تمت مزامنة N منتج» (المنتجات والأسعار تُقرأ مباشرةً من سلة).
+2. توقّف عند هذه الخطوة ولا تضغط «ربط صفحة» — الصفحة مرتبطة مسبقاً.
+3. من صفحة «الإعدادات» اختر صفحة «<اسم الصفحة المرتبطة بمتجر سلة>» ثم افتح «اختبار الرد
+   الذكي» واكتب سؤالاً مثل: «كم سعر ...؟» — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي
+   من كتالوج المتجر. (ملاحظة: الحساب يحوي صفحة ثانية مرتبطة بمتجر آخر لأغراض الاختبار؛
+   يُرجى استخدام الصفحة المذكورة أعلاه.)
 
 جواب24 تطبيق يعمل خارج واجهة المتجر: يقرأ منتجات المتجر وأسعارها ليجيب عملاءكم على
 واتساب وفيسبوك وإنستغرام. لا يضيف أي عنصر إلى واجهة المتجر ولا يعدّل عليها.

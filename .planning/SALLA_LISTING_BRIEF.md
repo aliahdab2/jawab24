@@ -237,7 +237,14 @@ Item-by-item, against the original required list:
 ## 7. Support + business decisions
 
 ### Support email
-- [TBD — recommend `support@jawab24.com` or platform-specific `salla-support@jawab24.com` for queue routing]
+✅ **DECIDED 2026-09-03 (owner): `support@jawab24.com`** — one inbox for all three portal fields
+(notification, submission, support), tag-routed rather than split into a per-platform
+`salla-support@` alias we would have to remember to monitor at zero installs.
+
+Receiving is verified against live DNS (Namecheap forwarding MX + matching SPF) and confirmed by
+the owner. ⛔ Still owed before **Submit**: an auto-responder (forwarding provides none, and a
+Gmail vacation reply would answer from the owner's personal address). See
+`docs/store-listing/salla/PORTAL_FIELD_MAP.md` §5 for the full verification and the two gaps.
 
 ### Pricing model
 Salla supports two billing models:
