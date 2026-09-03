@@ -300,6 +300,29 @@ uses these to exercise the app.
 Owed: a **dedicated review account** on jawab24.com with a connected Salla demo store and synced
 products. ⛔ Do not hand over a real merchant's account, and do not use the founder's own.
 
+**Decided 2026-09-03 (owner OK pending):** the review account is `ahdabeslov@gmail.com`
+(«Mohammad Jamal») — the Facebook review identity already shared with Meta and Apple review.
+Jawab24 has **no password login** (Facebook / phone-OTP / demo mode), so *Test Username* = that
+email, *Test Password* = the Facebook account's password, and the instructions must say
+«سجّل الدخول عبر فيسبوك». A phone-OTP account cannot serve a reviewer.
+
+⚠️ **This account also carries the Zid demo.** Its page «Jawab24 Test» is linked to the Zid demo
+store, so the Salla store gets a **second** page (created on the same Facebook account) — and the
+instructions must name that page for the smart-reply test. ⛔ Never re-link «Jawab24 Test».
+
+🔴 **Step 1 of the instructions below is currently FALSE for the reviewer (found 2026-09-03):**
+the «المتاجر» page (`/integrations`) is **admin-only** — `frontend/src/pages/integrations.tsx`
+redirects any non-admin to `/dashboard` ("while we finish public roll-out"). Making the review
+account an admin is not acceptable (admins see every real merchant). **Resolved 2026-09-03 by
+rewriting the instructions around `/salla/onboarding`** (auth-only, not admin-gated — verified;
+its step 1 shows «تم ربط المتجر» + store name and triggers a product sync, then reports
+«تمت مزامنة N منتج»). Lifting the admin gate was considered and **deferred: Zid app 7367 is under
+review, and opening `/integrations` would expose Zid's Connect button to every merchant mid-review.**
+Revisit after the Zid verdict (together with server-side capabilities gating for Zid/Shopify).
+⚠️ The wizard's next step lists every page with a Link button and rebinds silently — the
+instructions must tell the reviewer to stop after the sync line and NOT press «ربط صفحة».
+Re-verify steps 1–3 **as the review account, in production** before submitting.
+
 ⭐ **Measured 2026-08-20 — and it overturned a prediction worth recording.** All four fields carry a
 required star, from which it was inferred that the draft could not be saved until the reviewer
 account existed, putting that account on the critical path. **The measurement disproved it:** the
@@ -319,11 +342,14 @@ read which fields the validator actually names, rather than inferring the blocki
 
 بعد تسجيل الدخول بالبيانات أعلاه:
 
-1. من القائمة الجانبية اختر «المتاجر» — ستجد المتجر التجريبي مرتبطاً، مع عدد المنتجات
-   المزامنة وتاريخ آخر مزامنة.
-2. اضغط «مزامنة المنتجات» للتأكد من قراءة المنتجات والأسعار مباشرةً من سلة.
-3. من صفحة «الإعدادات» افتح «اختبار الرد الذكي» واكتب سؤالاً مثل: «كم سعر ...؟»
-   — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي من كتالوج المتجر.
+1. افتح الرابط https://jawab24.com/salla/onboarding ثم اضغط «ابدأ» — ستظهر رسالة
+   «تم ربط المتجر» مع اسم المتجر التجريبي، وتبدأ مزامنة المنتجات تلقائياً حتى تظهر
+   «تمت مزامنة N منتج» (المنتجات والأسعار تُقرأ مباشرةً من سلة).
+2. توقّف عند هذه الخطوة ولا تضغط «ربط صفحة» — الصفحة مرتبطة مسبقاً.
+3. من صفحة «الإعدادات» اختر صفحة «<اسم الصفحة المرتبطة بمتجر سلة>» ثم افتح «اختبار الرد
+   الذكي» واكتب سؤالاً مثل: «كم سعر ...؟» — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي
+   من كتالوج المتجر. (ملاحظة: الحساب يحوي صفحة ثانية مرتبطة بمتجر آخر لأغراض الاختبار؛
+   يُرجى استخدام الصفحة المذكورة أعلاه.)
 
 جواب24 تطبيق يعمل خارج واجهة المتجر: يقرأ منتجات المتجر وأسعارها ليجيب عملاءكم على
 واتساب وفيسبوك وإنستغرام. لا يضيف أي عنصر إلى واجهة المتجر ولا يعدّل عليها.

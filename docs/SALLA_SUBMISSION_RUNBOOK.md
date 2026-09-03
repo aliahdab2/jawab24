@@ -279,11 +279,20 @@ submission happens on the production app.
 - [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
-- [ ] A real Salla store connected end-to-end — install + token push ✅ 2026-08-23 (demo store);
-      **claim unblocked by D-093 — run after the deploy that carries it** (see the 2026-08-23 update)
-- [ ] **Tier 3 green — including `track_shipment`, which has never once been run**
-- [ ] The three Easy-Mode env vars set, incl. `SALLA_APP_STORE_URL` (only knowable post-publish
-      — see the ordering note in Phase 2.5)
+- [ ] A real Salla store connected end-to-end — install + token push + claim ✅ 2026-08-23 (demo
+      store, D-093) — **but the store row was later DELETED (discovered 2026-08-30) and the 08-23
+      21:30 re-push expired unclaimed.** Rebuild: *Reauthorize App* in the demo-store admin →
+      claim as the review account. Then link a **second** page to it — the account's only page
+      serves the Zid demo (see `SALLA_TEST_PLAN.md` Tier 3 preamble, 2026-09-03)
+- [ ] **Tier 3 green** — `track_shipment` ✅ 2026-08-24; remaining: 3.9 (uninstall + billing-mirror
+      cancel, then re-install/re-claim), 3.10, 3.11.1 (fires at the claim)
+- [x] `SALLA_APP_ID=665811310` set — **2026-08-30**, verified in-container (also 2026-09-03 after
+      the next deploy). The D-104 rail is armed
+- [ ] `SALLA_APP_STORE_URL` (only knowable post-publish — see the ordering note in Phase 2.5)
+- [ ] Service Trial credentials decided (owner): Jawab24 has no password login, so the reviewer
+      signs in with **Facebook** using the review account `ahdabeslov@gmail.com` — the same
+      account already shared with Meta and Apple review. Instructions must name the
+      **Salla-linked page** for the smart-reply test
 
 ## Phase 2.5 — Preconditions, in dependency order ⛔ DO THIS FIRST
 
@@ -312,6 +321,10 @@ depends on the previous.
       - `SALLA_EASY_MODE_CLAIM_ENABLED=true`
       - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true`
       Verify with `docker exec … printenv | grep '^SALLA_'` — never assume the file was picked up.
+- [x] **`SALLA_APP_ID=665811310` — DONE 2026-08-30** (owner; backend-blue recreated 20:44 UTC,
+      nginx reloaded). Verified in-container as booleans, never by printing the env file. ⚠️ The
+      first reconcile logged nothing — that was `scanned = 0` (the review store row had been
+      deleted), NOT a dormant gate; see the test plan's 2026-08-30 results.
 - [ ] **`SALLA_APP_STORE_URL` — CANNOT be set yet, and that is not an oversight.** The URL only
       exists once the listing is published, so this is a **post-publish** step, not a
       pre-publish one. Until then `POST /salla/store/connect` answers 404
