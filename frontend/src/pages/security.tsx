@@ -21,15 +21,10 @@ import { UPTIME_STATS } from '@/data/uptime';
 
 const PATH = '/security';
 
-/** Where a reader can report a vulnerability. Same address the Organization
- *  contactPoint in _document.tsx publishes, so the two cannot drift. */
-const SECURITY_CONTACT = 'support@jawab24.com';
-
-/** Used only as the `url` inside the JSON-LD block — the <link rel="canonical">
- *  tag itself is _app.tsx's job, exactly as on /trust. */
-function canonicalFor(locale: string) {
-  return BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en${PATH}` : PATH);
-}
+/** Where a reader can report a vulnerability. The SAME constant the Organization
+ *  contactPoint in _document.tsx publishes — not a copy of it, so the two cannot
+ *  drift apart the way two hardcoded literals silently would. */
+const SECURITY_CONTACT = BRAND_ASSETS.contact.support;
 
 /** One section: an icon-led heading over its own content. */
 function Section({
@@ -75,7 +70,8 @@ export default function Security() {
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
-  const canonical = canonicalFor(locale);
+  // Only the JSON-LD `url` — the <link rel="canonical"> tag itself is _app.tsx's job.
+  const canonical = BRAND_ASSETS.urls.canonicalForLocale(locale, PATH);
 
   return (
     <>
@@ -139,7 +135,7 @@ export default function Security() {
             >
               <h2
                 id="scope-heading"
-                className="flex items-center gap-2 text-xl font-semibold text-foreground mb-3"
+                className="flex items-center gap-2 text-2xl font-semibold text-foreground mb-3"
               >
                 <Eye className="w-6 h-6 shrink-0 text-brand-400" aria-hidden="true" />
                 {t('scopeHeading')}
@@ -157,8 +153,14 @@ export default function Security() {
               />
             </Section>
 
+            {/* Two paragraphs, not one: Meta/Shopify/Salla sign their deliveries
+                and Zid does NOT (controllers/zid.ts — per-store webhooks carry an
+                HTTP Basic credential, App Market lifecycle events carry nothing).
+                Rounding those into a single "every webhook is signed" sentence is
+                the exact class of claim this page exists to stop making. */}
             <Section id="integrity-heading" icon={FileSignature} heading={t('integrityHeading')}>
               <p className="text-foreground/80 leading-relaxed">{t('integrityBody')}</p>
+              <p className="mt-3 text-foreground/80 leading-relaxed">{t('integrityZid')}</p>
             </Section>
 
             <Section id="hosting-heading" icon={Server} heading={t('hostingHeading')}>
@@ -167,9 +169,13 @@ export default function Security() {
 
             <Section id="subprocessors-heading" icon={Users} heading={t('subprocessorsHeading')}>
               <p className="text-foreground/80 leading-relaxed">{t('subprocessorsBody')}</p>
-              <p className="mt-3 text-foreground/90 font-medium" dir="ltr">
-                {t('subprocessorsList')}
-              </p>
+              {/* ⛔ NO dir override here. The Arabic list is mixed-script
+                  («… وShopify، وسلة، وزد، وHetzner»); forcing dir="ltr" made the
+                  bidi algorithm reorder every Arabic run, so the «، و» separators
+                  and the last two names rendered in the wrong places. Inheriting
+                  from <html dir> is both correct and what the project rule
+                  requires — dir belongs on portals/modals/overlays only. */}
+              <p className="mt-3 text-foreground/90 font-medium">{t('subprocessorsList')}</p>
               <p className="mt-3 text-foreground/70 leading-relaxed">{t('subprocessorsNote')}</p>
             </Section>
 
@@ -182,8 +188,14 @@ export default function Security() {
             </Section>
 
             <Section id="report-heading" icon={ShieldAlert} heading={t('reportHeading')}>
-              <p className="text-foreground/80 leading-relaxed">
-                {t('reportBody', { email: SECURITY_CONTACT })}
+              <p className="text-foreground/80 leading-relaxed">{t('reportBody')}</p>
+              <p className="mt-2">
+                <a
+                  href={`mailto:${SECURITY_CONTACT}`}
+                  className="text-brand-400 hover:text-brand-300 transition-colors"
+                >
+                  <bdi>{SECURITY_CONTACT}</bdi>
+                </a>
               </p>
             </Section>
 

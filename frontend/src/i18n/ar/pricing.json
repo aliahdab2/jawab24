@@ -84,7 +84,7 @@
   "savePercent": "وفّر ~17%",
   "billedYearly": "يُدفع {amount}/سنة",
   "sarEquivalent": "≈ {amount} ر.س/شهر",
-  "trustUptime": "توافر {percent}% خلال {days} يومًا، بقياس مستقل",
+  "trustUptime": "توافر {percent}٪ خلال {days} يومًا، بقياس مستقل",
   "annualSavingsAmount": "وفّر {amount}/سنة",
   "trustCancelAnytime": "إلغاء في أي وقت",
   "faqTitle": "الأسئلة الشائعة",

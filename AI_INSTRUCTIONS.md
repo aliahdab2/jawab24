@@ -76,7 +76,7 @@ const tc = useTranslations('common');  // shared strings
 t('title');  tc('save');
 ```
 
-**File structure:** `frontend/src/i18n/{en,ar}/<namespace>.json` (44 namespaces). Flat or 1-level nested. Max 2 levels — validator enforces this.
+**File structure:** `frontend/src/i18n/{en,ar}/<namespace>.json` (57 namespaces). Flat or 1-level nested. Max 2 levels — validator enforces this.
 
 **Page loading:** `makeGetStaticProps(['settings', 'time'])` from `@/i18n/getMessages`
 

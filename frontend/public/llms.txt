@@ -17,7 +17,7 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 - Pricing: 14-day free trial (no credit card) → Starter $15/mo → Business $39/mo → Pro $79/mo
 - Mobile: Android app on Google Play with push notifications
 - Reliability: 99.97% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — the lower-scoring of two monitored endpoints, not their average: 3 incidents totalling 27 minutes — public status page: https://stats.uptimerobot.com/ijNBtFf9SC
-- Security: OAuth 2.0 only (no password storage), TLS 1.2/1.3 in transit, AES-256-GCM for stored access tokens, HMAC-SHA256 webhook verification, dedicated EU servers, every sub-processor named — with each claim's scope stated at https://jawab24.com/security
+- Security: OAuth 2.0 only (no password storage), TLS 1.2/1.3 in transit, AES-256-GCM for stored access tokens, HMAC-SHA256 webhook verification on Meta/Shopify/Salla (Zid uses HTTP Basic — it does not sign), dedicated EU servers at Hetzner, every sub-processor named — with each claim's scope stated at https://jawab24.com/security
 - Operated by: Mohammad Ali Ahdab, a Swedish sole trader (Enskild Näringsverksamhet) registered in Eslöv, Sweden — full details on https://jawab24.com/terms
 
 ## What Makes Jawab24 Different

@@ -25,8 +25,8 @@
  * TO REFRESH: re-read the 90-day stats AND the incident list, recompute from
  * the WORST monitor, update every field below including measuredAt, and mirror
  * the percentage into public/llms.txt and public/llms-full.txt —
- * validate-llms.js pins those two to agree, and trust.test.tsx pins them to
- * this constant.
+ * validate-llms.js pins those two to agree, and
+ * src/__tests__/pages/trustEvidence.test.ts pins them to this constant.
  */
 export const UPTIME_STATS = {
     /** Worst monitor over the window, rounded down from 99.9790%. */

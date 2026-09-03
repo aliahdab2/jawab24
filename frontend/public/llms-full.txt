@@ -164,10 +164,10 @@ Available on Android via Google Play. Features:
 - OAuth 2.0 authentication through Facebook (no password storage)
 - All data encrypted in transit (HTTPS/TLS)
 - GDPR-compliant data handling with full data deletion support
-- Webhook signature verification (HMAC) for all integrations
+- Webhook authentication before any event is processed: HMAC-SHA256 signatures from Meta, Shopify and Salla, verified in constant time; Zid does not sign its deliveries and is authenticated with an HTTP Basic credential instead, while its unauthenticated App Market lifecycle notifications are treated as untrusted triggers and re-read from Zid's API
 - Token encryption (AES-256-GCM) for stored credentials
 - Scope stated deliberately: encryption at rest covers the credential set (access tokens for connected Facebook, Instagram, WhatsApp and store accounts), not a blanket claim over conversation content, which is held on access-controlled servers in the European Union
-- Every sub-processor is named in the Privacy Policy — OpenAI, Meta, Stripe, Sentry, Resend, Google, Shopify, Salla, Zid — with no unnamed "trusted partners" category
+- Every sub-processor is named in the Privacy Policy — OpenAI, Meta, Stripe, Sentry, Resend, Google, Shopify, Salla, Zid, Hetzner (hosting) — with no unnamed "trusted partners" category
 - Security page, with each claim and its scope: https://jawab24.com/security
 - Sentry error tracking for reliability monitoring
 - Availability: 99.97% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — the lower-scoring of two monitored endpoints, not their average: 3 incidents totalling 27 minutes — public status page: https://stats.uptimerobot.com/ijNBtFf9SC

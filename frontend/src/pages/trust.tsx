@@ -8,13 +8,6 @@ import { UPTIME_STATS, CHECK_INTERVAL_MINUTES, DOWNTIME_MINUTES } from '@/data/u
 
 const PATH = '/trust';
 
-/** Used only as the `url` inside the JSON-LD block — the <link rel="canonical">
- *  tag itself is _app.tsx's job. Built through the same helper _app.tsx uses so
- *  the two cannot disagree if the origin or the locale-prefix scheme changes. */
-function canonicalFor(locale: string) {
-  return BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en${PATH}` : PATH);
-}
-
 /** One measured figure with its label, rendered large. */
 function Figure({ value, label }: { value: string; label: string }) {
   return (
@@ -30,7 +23,8 @@ export default function Trust() {
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
-  const canonical = canonicalFor(locale);
+  // Only the JSON-LD `url` — the <link rel="canonical"> tag itself is _app.tsx's job.
+  const canonical = BRAND_ASSETS.urls.canonicalForLocale(locale, PATH);
 
   /** seoDescription interpolates these; seoTitle deliberately does not. */
   const seoValues = {

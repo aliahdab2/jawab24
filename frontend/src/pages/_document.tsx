@@ -159,6 +159,13 @@ export default function MyDocument({ locale }: DocProps) {
               // identity number into machine-readable markup is a different act
               // from meeting a disclosure duty on one page. Add it only on an
               // explicit decision by the owner.
+              // ⛔ The SAME reasoning, applied consistently, is why `streetAddress`
+              // stops at the building and drops the apartment designator that
+              // /terms carries. This is a sole trader's home; a personnummer is
+              // semi-public in Sweden, an apartment is a physical location, and
+              // schema.org/address is optional — it earns no knowledge-panel
+              // benefit that would pay for the precision. Dropping `address`
+              // altogether remains open and is likewise the owner's call.
               "legalName": "Mohammad Ali Ahdab",
               "founder": {
                 "@type": "Person",
@@ -166,7 +173,7 @@ export default function MyDocument({ locale }: DocProps) {
               },
               "address": {
                 "@type": "PostalAddress",
-                "streetAddress": "Bergavägen 15 A lgh 1002",
+                "streetAddress": "Bergavägen 15 A",
                 "postalCode": "241 39",
                 "addressLocality": "Eslöv",
                 "addressCountry": "SE"
@@ -179,7 +186,7 @@ export default function MyDocument({ locale }: DocProps) {
               "contactPoint": {
                 "@type": "ContactPoint",
                 "contactType": "customer support",
-                "email": "support@jawab24.com",
+                "email": BRAND_ASSETS.contact.support,
                 "url": "https://jawab24.com/contact",
                 "availableLanguage": ["Arabic", "English"]
               }
