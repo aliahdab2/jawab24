@@ -442,6 +442,38 @@ describe('Zid Service', () => {
             expect(mockCaptureError).not.toHaveBeenCalled();
         });
 
+        it('treats the 400 max-limit-exceeded body as already-registered (Zid caps at 1/event)', async () => {
+            // Exact envelope Zid returns for a duplicate subscription
+            // (JAWAB24-BACKEND-2P, 2026-09-03): a store re-connect re-POSTs every
+            // event and Zid rejects the existing ones with this 400.
+            mockFetch.mockResolvedValue(jsonResponse({
+                status: 'error',
+                message: { type: 'error', code: null, name: null, description: 'تم تجاوز الحد الأقصى وهو 1 ' },
+            }, 400));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        it('still records an unrelated 400 as a failure (does not blanket-swallow 400)', async () => {
+            // A 400 that is NOT the max-limit signal (e.g. an unknown event) is a
+            // real error and must surface — proves the duplicate match is specific.
+            mockFetch.mockResolvedValue(jsonResponse({
+                status: 'error',
+                message: { description: 'Invalid event name' },
+            }, 400));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([]);
+            expect(result.failed).toHaveLength(ZID_WEBHOOK_EVENTS.length);
+            expect(result.failed[0]).toMatchObject({ topic: 'product.create', status: 400 });
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
         it('records non-2xx failures with status and captures the error', async () => {
             mockFetch.mockResolvedValue(jsonResponse({ error: 'boom' }, 500));
 

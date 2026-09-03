@@ -263,6 +263,44 @@ export function isAbandonedCartEvent(event: string): boolean {
 }
 
 /**
+ * True when a non-2xx webhook-registration response means the subscription
+ * *already exists* rather than a real failure.
+ *
+ * Zid caps subscriptions at one per event, so re-registering a store that is
+ * already subscribed is the normal case (every re-connect and every retry).
+ * It signals this three ways, all confirmed to be "already there", none an
+ * error we should surface or retry:
+ *   - 409 / 422 — conflict / validation-style duplicate (Salla precedent).
+ *   - 400 whose body carries the max-limit message "تم تجاوز الحد الأقصى وهو 1"
+ *     ("the maximum, which is 1, has been exceeded"). Confirmed 2026-09-03 via
+ *     JAWAB24-BACKEND-2P: a store re-connect re-POSTs every event and Zid
+ *     answers the existing ones with exactly this 400.
+ *
+ * A 400 for any *other* reason (unknown event, malformed target_url) is a
+ * genuine failure and must NOT be swallowed here — so the 400 branch matches
+ * only the max-limit signal, never a bare status code.
+ */
+export function isZidWebhookAlreadyRegistered(status: number, body: string): boolean {
+    if (status === 409 || status === 422) return true;
+    if (status !== 400) return false;
+    if (!body) return false;
+    // Prefer Zid's structured `message.description`; fall back to the raw body.
+    let text = body;
+    try {
+        const desc = (JSON.parse(body) as { message?: { description?: unknown } })?.message?.description;
+        if (typeof desc === 'string') text = desc;
+    } catch {
+        // Body was not JSON — match against the raw text below.
+    }
+    // Match Zid's max-limit wording. Arabic is Zid's default (and what we have
+    // confirmed); the English pair is a defensive fallback should the locale
+    // ever change. Both require the "limit exceeded" idea, so an unrelated 400
+    // cannot match.
+    return /تجاوز الحد الأقصى/.test(text)
+        || (/\bmaximum\b|\blimit\b/i.test(text) && /\bexceed/i.test(text));
+}
+
+/**
  * Subscribe all Zid webhooks for a store via POST /v1/managers/webhooks.
  *
  * Each subscription's target_url embeds routing hints (`e` = event, `sid` = our
@@ -311,9 +349,10 @@ export async function registerWebhooks(creds: ZidCredentials, storeId: string): 
         const { response, body } = result.value;
         if (response.ok) {
             registered.push(event);
-        } else if (response.status === 409 || response.status === 422) {
-            // Already-exists — treat as success (Salla 422 precedent;
-            // Zid's exact duplicate status is unconfirmed, both tolerated).
+        } else if (isZidWebhookAlreadyRegistered(response.status, body)) {
+            // Already subscribed — Zid caps at 1 per event, so a re-connect or
+            // retry re-hits every existing event. Not a failure; see
+            // isZidWebhookAlreadyRegistered for the confirmed 409/422/400 signals.
             registered.push(event);
         } else {
             failed.push({ topic: event, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
