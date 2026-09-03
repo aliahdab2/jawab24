@@ -4143,3 +4143,44 @@ no input could be built where the order changes the output, so that ordering is 
 than load-bearing, and the code says so). jsdom does no bidi
 layout, so the unit tests can only pin *which* tokens get isolated; the visual outcome was verified
 by rendering the real `renderReplyForChannel` output in Chrome.
+
+## D-123 · A tab whose session cookie has changed hands drops LOCAL state only — the identity check is `/auth/me`'s `id`, and revoking the server session is forbidden (2026-09-03)
+
+**Ruling.** `syncSessionState` compares the `id` in the `/auth/me` response against the persisted
+`user.id` on every authenticated page mount. When they differ, the tab clears **local session state
+only** — `authManager.clearLocalSession`, which touches localStorage, the zustand store and the
+Sentry user context, and deliberately does NOT call `/auth/logout` — then does a full page load to
+`signedOutPath()`. `isAdmin` is reconciled from the same response alongside `isPartner`, and a
+`403 ADMIN_REQUIRED` from any endpoint clears a stale `isAdmin` in the interceptor as a net.
+
+**The failure it closes.** On web the session is an HttpOnly cookie owned by the browser *profile*,
+while the identity rendered on screen — name, picture, `isAdmin` — comes from the zustand store in
+localStorage. Sign in as a second account in any tab of that profile and the cookie is replaced
+while the other tabs' persisted stores are not. **Nothing 401s**: the new cookie is a perfectly
+valid session, merely not the one that tab was built for, so the 401 interceptor never fires and no
+other code path compares identities. The tab stays wedged indefinitely — previous account in the
+chrome, every request answered for the new one — until someone logs out by hand. Reported
+2026-09-03: the admin area rendered its full shell with "0 customers" over "Failed to load
+customers", because `AdminLayout` gates on the persisted `isAdmin` (stale `true`) while the backend,
+reading the session it actually received, returned 403 `ADMIN_REQUIRED`. `/auth/me` has always
+returned `id`; the client threw it away and compared only `isPartner`.
+
+**Why a server logout is forbidden here, not merely unnecessary.** The obvious implementation —
+"call the existing `logout()`" — revokes the refresh-token family behind the shared cookie, which is
+the session the merchant is *actively using in the tab they just signed in on*. That fixes the stale
+tab by breaking the working one, and does it on a background page-mount request the merchant never
+initiated. Local state is the only thing that is wrong when a session changes hands, so it is the
+only thing that may be cleared. `clearLocalSession` exists as a separate method rather than a flag
+on `logout()` so that the restraint is structural: `logout()` layers the server half on top of it,
+and no caller can reach the server half by accident. Pinned by an explicit test that
+`clearLocalSession` never calls `publicApi.post`.
+
+**Why a full page load rather than a router push.** A client-side route change leaves the mounted
+React tree holding the departed user in component state; only a document load guarantees every
+consumer is rebuilt from the cleared store.
+
+**Bounds.** Both ids must be present for the check to fire — a response without an `id` or a store
+predating this check is *missing data*, not evidence of a different user, and reading it as one
+would sign merchants out of working sessions. Native is unaffected in practice (the Bearer token in
+localStorage *is* the identity, so there is no shared jar to change underneath it), but the check is
+platform-agnostic like the rest of `syncSessionState` — see the no-platform-branch note there.

@@ -179,8 +179,9 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: async () => {
-        // Clear Sentry user context on logout
-        Sentry.setUser(null);
+        // Sentry's user context is detached by authManager.clearLocalSession,
+        // which every session-dropping path goes through — including the
+        // interceptor's forced logout, which never reaches this function.
 
         // Use centralized AuthManager for consistent logout behavior
         // This ensures the same logout flow is used everywhere (interceptors, UI, etc.)

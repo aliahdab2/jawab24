@@ -603,6 +603,42 @@ away in milliseconds and can lose the rotation's Set-Cookie mid-teardown
 (`authManager.isOnAuthBridgePage`). Token hashing uses the shared `sha256Hex`
 (`backend/src/utils/hash.ts`).
 
+**Client-side session reconciliation (`frontend/src/lib/sessionSync.ts`)** — one
+`/auth/me` per authenticated page mount, from `DashboardLayout`. It answers three
+questions, and the second is the non-obvious one:
+
+1. *Is the session still live?* `isAuthenticated` is optimistic, read from the
+   persisted store so the shell paints instantly. A revoked session surfaces here
+   as a 401 and the interceptor takes it from there.
+2. *Whose session is it?* The response's `id` is compared against the persisted
+   `user.id`. On web the session is an HttpOnly cookie owned by the browser
+   **profile**, while the identity on screen — name, picture, `isAdmin` — comes
+   from localStorage. Signing in as a second account in any tab of that profile
+   replaces the cookie and leaves every other tab's persisted store untouched, so
+   the two disagree about who is signed in. **Nothing 401s** — the new cookie is a
+   perfectly valid session, just not the one that tab was built for — so this
+   comparison is the only thing in the product that can detect it. Without it the
+   tab renders the previous account's identity over data fetched for the new one,
+   indefinitely (shipped symptom, 2026-09-03: the admin area rendering "0
+   customers" above "Failed to load customers", because `AdminLayout` gates on the
+   stale persisted `isAdmin` while the server 403s `ADMIN_REQUIRED`).
+   On mismatch: **local state only** is dropped, via
+   `authManager.clearLocalSession` — never `/auth/logout`, which would revoke the
+   session the merchant is actively using in the tab they just signed in on (D-123).
+   A full page load to `signedOutPath()` follows, so no component is left holding
+   the old user in React state.
+3. *What have the server-resolved flags become?* `isPartner` (the `partners`
+   table) and `isAdmin` (`users.is_admin`) are both decided server-side and can
+   change while a device stays signed in; login is the only other place they are
+   resolved. Patched only on a real change — the store is persisted, so an
+   unconditional write would rewrite localStorage on every page mount.
+
+As a net for (2) and (3), a `403 ADMIN_REQUIRED` from any endpoint clears the
+stale `isAdmin` in the interceptor, which is what makes `AdminLayout` redirect
+instead of rendering a shell whose every panel fails. Regression coverage:
+`frontend/src/lib/__tests__/sessionSync.test.ts`,
+`frontend/src/__tests__/authManager.test.ts`.
+
 **Facebook OAuth (secondary):**
 ```
 1. User clicks "Login with Facebook" → Facebook OAuth redirect

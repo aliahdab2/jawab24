@@ -13,13 +13,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const getProfile = vi.fn();
 const updateUser = vi.fn();
-let storedUser: { isPartner?: boolean } | null = { isPartner: false };
+const clearLocalSession = vi.fn();
+let storedUser: { id?: string; isPartner?: boolean; isAdmin?: boolean } | null =
+    { id: 'u-1', isPartner: false };
 
 vi.mock('@/lib/api', () => ({ authApi: { getProfile: () => getProfile() } }));
 vi.mock('@/lib/store', () => ({
     useAuthStore: { getState: () => ({ user: storedUser, updateUser }) },
 }));
 vi.mock('@/lib/sentryHelpers', () => ({ addErrorBreadcrumb: vi.fn() }));
+vi.mock('@/lib/authManager', () => ({
+    authManager: {
+        clearLocalSession: (...args: unknown[]) => clearLocalSession(...args),
+        signedOutPath: () => '/login',
+    },
+}));
 
 // Native is the platform the old gate excluded. Pinned true for the whole
 // suite: if a platform branch is ever reintroduced, every assertion below that
@@ -33,7 +41,11 @@ import { syncSessionState } from '../sessionSync';
 describe('syncSessionState', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        storedUser = { isPartner: false };
+        storedUser = { id: 'u-1', isPartner: false };
+        Object.defineProperty(window, 'location', {
+            value: { href: '/admin/customers' },
+            writable: true,
+        });
     });
 
     it('picks up a partner registered after this device signed in', async () => {
@@ -90,5 +102,117 @@ describe('syncSessionState', () => {
 
         await expect(syncSessionState()).resolves.toBeUndefined();
         expect(updateUser).not.toHaveBeenCalled();
+    });
+
+    /**
+     * `isAdmin` is the same staleness class as `isPartner` and was being
+     * discarded from the same response. It decides whether AdminLayout renders
+     * at all, so a stale `true` is what produced a fully-rendered admin area in
+     * which every panel 403'd.
+     */
+    describe('isAdmin', () => {
+        it('picks up admin granted after this device signed in', async () => {
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-1', isAdmin: true } });
+
+            await syncSessionState();
+
+            expect(updateUser).toHaveBeenCalledWith({ isAdmin: true });
+        });
+
+        it('drops admin revoked after this device signed in', async () => {
+            storedUser = { id: 'u-1', isAdmin: true };
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-1', isAdmin: false } });
+
+            await syncSessionState();
+
+            expect(updateUser).toHaveBeenCalledWith({ isAdmin: false });
+        });
+
+        it('patches both flags in one write when both drifted', async () => {
+            storedUser = { id: 'u-1', isPartner: false, isAdmin: true };
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-1', isPartner: true, isAdmin: false } });
+
+            await syncSessionState();
+
+            expect(updateUser).toHaveBeenCalledTimes(1);
+            expect(updateUser).toHaveBeenCalledWith({ isPartner: true, isAdmin: false });
+        });
+    });
+
+    /**
+     * The reported bug (2026-09-03). On web the session is an HttpOnly cookie
+     * owned by the browser PROFILE while the identity on screen comes from
+     * localStorage, so signing in as a second account anywhere in that profile
+     * leaves this tab's store describing one user and its cookie another.
+     * Nothing 401s — the new cookie is a valid session — so before this check
+     * there was no code anywhere that could notice.
+     */
+    describe('identity mismatch', () => {
+        it('drops the local session when the server answers for another user', async () => {
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-2', isAdmin: false } });
+
+            await syncSessionState();
+
+            expect(clearLocalSession).toHaveBeenCalled();
+        });
+
+        /**
+         * ⛔ The stale flags must NOT be patched onto the old user instead:
+         * that would leave the previous account's name, picture and workspaces
+         * on screen and merely stop the admin shell from rendering — the crossed
+         * state, tidied up.
+         */
+        it('does not try to patch flags onto the departed user', async () => {
+            storedUser = { id: 'u-1', isAdmin: true };
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-2', isAdmin: false } });
+
+            await syncSessionState();
+
+            expect(updateUser).not.toHaveBeenCalled();
+        });
+
+        /**
+         * A full page load, not a client route change: a router push leaves the
+         * mounted tree holding the old user in React state.
+         */
+        it('sends the tab to the signed-out path with a real navigation', async () => {
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-2' } });
+
+            await syncSessionState();
+
+            expect(window.location.href).toBe('/login');
+        });
+
+        it('leaves an unchanged identity completely alone', async () => {
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-1', isPartner: false } });
+
+            await syncSessionState();
+
+            expect(clearLocalSession).not.toHaveBeenCalled();
+            expect(window.location.href).toBe('/admin/customers');
+        });
+
+        /**
+         * Missing data is not evidence of a different user. A response without
+         * an `id` (older backend, truncated payload) or a store predating this
+         * check must never be read as "the session changed hands" — that would
+         * sign merchants out of working sessions.
+         */
+        it('does nothing when the server reports no id', async () => {
+            getProfile.mockResolvedValueOnce({ data: { isPartner: false } });
+
+            await syncSessionState();
+
+            expect(clearLocalSession).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when the stored user has no id', async () => {
+            storedUser = { isPartner: false };
+            getProfile.mockResolvedValueOnce({ data: { id: 'u-2', isPartner: false } });
+
+            await syncSessionState();
+
+            expect(clearLocalSession).not.toHaveBeenCalled();
+        });
     });
 });

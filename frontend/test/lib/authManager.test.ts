@@ -9,10 +9,15 @@ vi.mock('@sentry/nextjs', () => ({
     addBreadcrumb: vi.fn(),
 }));
 
-// Mock sentryHelpers
+// Mock sentryHelpers.
+// ⛔ EXHAUSTIVE: a factory mock replaces the module wholesale, so every export
+// authManager imports must be listed. A missing one does not report as a
+// missing mock — it surfaces as whatever the code was doing when it called
+// through (here: five logout assertions failing on the wrong error message).
 vi.mock('@/lib/sentryHelpers', () => ({
     captureError: vi.fn(),
     addErrorBreadcrumb: vi.fn(),
+    clearSentryUser: vi.fn(),
 }));
 
 // We test the AuthManager class by importing it fresh.
