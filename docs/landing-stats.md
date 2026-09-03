@@ -5,6 +5,15 @@ marketing rounding. They live in `frontend/src/i18n/{en,ar}/landing.json` under
 `testimonials.*` and are rendered by
 `frontend/src/components/landing/LandingSocialProof.tsx`.
 
+`stat1Value` has a **second render site**: the hero stats band
+(`StatsSection` in `LandingPageContent.tsx`) reads the same key, labelled
+`stats.speed`. It deliberately reads the key rather than carrying its own copy —
+until 2026-09-04 the band hard-coded `<1s` while the social-proof block published
+`6 seconds`, so the same page stated two different latency claims six sections
+apart, and the faster one was supported by no measurement in this repo (the
+production p50 is 2.7 s, and even the no-AI template floor is 1.01 s). One key,
+one number. Do not reintroduce a literal.
+
 | Key | Claim | Published | Actually measured |
 |-----|-------|-----------|-------------------|
 | `stat1Value` | Median time to reply to a customer | **6 seconds** | ≤2.7 s — see the latency caveat |
@@ -137,6 +146,10 @@ public claim.
    exists is that nobody will remember to re-run these queries.
 3. **Only move `stat1Value` in the conservative direction** until the discrepancy above
    is resolved. Latency is the easiest of these claims to overstate.
+   **And it is the only latency figure the marketing surface may state.** Any other
+   "we reply in X" claim — a hero tile, a feature blurb, a blog line — is an ungoverned
+   second writer of this number and will drift away from it. Prose on those surfaces says
+   *how* we are fast ("automatically, around the clock"), never *how fast*.
 4. **Aggregates only.** No merchant names, page names, or logos. The single named
    testimonial (الفريق الدمشقي) is there by explicit consent.
 5. Both locales carry Western digits — keep them in step.

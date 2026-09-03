@@ -99,7 +99,10 @@ export default function LandingPageContent({ latestPosts = [] }: LandingPageCont
 
   const statsList = [
     { value: '24/7', label: t('stats.available') },
-    { value: '<1s', label: t('stats.speed') },
+    // The reply-time figure is a measured claim governed by docs/landing-stats.md.
+    // It is read from the SAME key the social-proof block renders (which carries the
+    // scope line) so the page can never show two different latency numbers again.
+    { value: t('testimonials.stat1Value'), label: t('stats.speed') },
   ];
 
   return (
