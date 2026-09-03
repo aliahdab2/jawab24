@@ -23,6 +23,34 @@ export interface StoreForWebhooks {
 }
 
 /**
+ * Narrow a full `ecommerce_stores` row to the fields webhook registration needs.
+ *
+ * ⚠️ Always use this instead of hand-writing the object literal. Zid needs BOTH
+ * credentials (`Authorization` Bearer + `X-Manager-Token`), and two of the three
+ * call sites used to build the literal by hand and silently omit
+ * `authorizationToken` / `authorizationTokenIv` — the merchant's own
+ * "Re-register webhooks" button (`controllers/ecommerceWebhooks.ts`) and the
+ * admin repair script (`scripts/reregister-webhooks.ts`). Both therefore threw
+ * `Zid store <id> has no Authorization token — merchant must reconnect`, which
+ * `registerWebhooksWithPersist` caught and persisted as `failed: [{topic:'all'}]`
+ * plus a fresh Sentry error plus a fresh retry job: clicking the repair button
+ * made the state worse, and the only working caller was the retry worker.
+ *
+ * A shared picker makes the omission impossible rather than merely reviewable
+ * (prevention over detection) — a fourth call site cannot repeat it.
+ */
+export function toStoreForWebhooks(row: StoreForWebhooks): StoreForWebhooks {
+    return {
+        id: row.id,
+        storeDomain: row.storeDomain,
+        accessToken: row.accessToken,
+        accessTokenIv: row.accessTokenIv,
+        authorizationToken: row.authorizationToken,
+        authorizationTokenIv: row.authorizationTokenIv,
+    };
+}
+
+/**
  * Contract for e-commerce platform integrations (Shopify, Salla, Zid, ...).
  *
  * Each integration implements these hooks so core files (index.ts, auth.ts,

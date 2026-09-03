@@ -654,6 +654,25 @@ overwritten when supplied). `resolveStoreCredentialPair` returns both decrypted 
   until a live capture lands in `docs/testing/zid_live_payloads.jsonl`).
   ⚠️ Stores connected before 2026-08-25 keep the old 6-event subscription until
   webhooks are re-registered (merchant UI button or `reregister-webhooks.js zid`).
+- **Re-registering an already-subscribed store is normal, and Zid rejects the events it
+  already holds.** Confirmed 2026-09-03 (`JAWAB24-BACKEND-2P`): a re-connect re-POSTs every
+  event and the existing `product.*` ones answer `400` with
+  `{"status":"error","message":{…,"description":"تم تجاوز الحد الأقصى وهو 1 "}}` ("the
+  maximum, which is 1, has been exceeded"). `services/zid.ts#isZidWebhookAlreadyRegistered`
+  treats that — and 409/422 on the Salla precedent — as already-registered; a `400` for any
+  other reason stays a real failure. Counting the duplicate as a failure had left
+  `webhookStatus.failed` non-empty forever: retry-until-exhausted, Sentry noise on every
+  pass, and a permanent merchant-facing "Re-register webhooks" CTA. Same class as Salla's
+  portal-event 422.
+  - The Arabic is matched through `normalizeArabic` (`@jawab24/shared`), not as an exact
+    literal: a non-breaking space, a doubled space, a diacritic or the hamza-less `الاقصى`
+    all miss a byte-exact match and would silently restore the bug. There is deliberately
+    **no English fallback** — a speculative `/maximum|limit/ && /exceed/` pair also swallowed
+    "Rate limit exceeded" and "target_url exceeded the maximum length of 255", the latter
+    being exactly the malformed-URL failure that must surface.
+  - ⚠️ The cap is **not** proven to be per-event — see the open question below before
+    repeating that claim. `webhookStatus.alreadyRegistered` records which topics were
+    tolerated, and with which status, so the question is answerable from a live store.
   Deliberately excluded: `order.payment_status.update` (no consumer),
   `customer.*`/`category.*`.
 - **App lifecycle** (`app.market.application.install` / `app.market.application.uninstall`)
@@ -897,7 +916,29 @@ describe titles (grep for it).
   `undefined` when absent.
 - Whether the refresh-token grant response rotates the `Authorization` token (handled
   either way: parsed when present, stored pair kept when absent).
-- Zid's duplicate-webhook status code (409 and 422 both treated as already-registered).
+- ⭐ **Whether Zid's subscription cap is per EVENT — still open, and the obvious answer is
+  wrong.** Confirmed: re-POSTing an existing `product.*` subscription answers `400` with
+  `{"status":"error","message":{…,"description":"تم تجاوز الحد الأقصى وهو 1 "}}`. NOT
+  confirmed: that this is a per-event cap. Over 30 days and ≥4 registration attempts
+  (Sentry, to 2026-09-03) ONLY the four `product.*` topics ever produced that 400;
+  `order.create` — registered at the 2026-08-11 install and proven delivering 2026-08-23 —
+  and `order.status.update` never produced it once, which a per-event cap cannot explain.
+  So either the cap is scoped to `product.*`, or those topics are being RE-CREATED on every
+  attempt (duplicate subscriptions ⇒ duplicate order/cart deliveries). To settle it, read
+  `platform_data->'webhookStatus'->'alreadyRegistered'` on a live store after one
+  re-registration: a topic listed there already existed (with the status Zid used); a topic
+  in `registered` but absent from it answered 2xx and was freshly created.
+- Zid's 409/422 as duplicate signals — kept on the Salla precedent, never observed from Zid.
+- ⚠️ **Whether Zid exposes a webhook LIST/UPDATE endpoint.** Only `POST /v1/managers/webhooks`
+  is documented, though the app's scope matrix grants Webhooks **RW**. This matters: Salla
+  and Shopify both do list-then-upsert precisely because a plain re-subscribe cannot repair
+  an existing subscription, and Salla shipped exactly that bug (`services/salla.ts` — every
+  pre-2026-08-23 store left with unsigned subscriptions). Zid's subscription carries the
+  Basic-auth password (`ZID_WEBHOOK_SECRET`) and the `target_url`, and we treat the duplicate
+  as success, so **today neither can be repaired**. ⛔ Accepted risk, stated so the next
+  person rotating the secret knows: **rotating `ZID_WEBHOOK_SECRET` silently 401s every Zid
+  `product.*` delivery** while `webhookHealth` still reads `ok`. Find the update endpoint and
+  move to list-then-upsert before any rotation.
 - The exact casing of the `Basic` scheme on deliveries: verification compares the full
   header string (fails closed on `basic …`) — confirm Zid's casing from a real capture.
 - **Billing (D-070), the whole envelope.** `GET /v1/market/app/subscription` has never

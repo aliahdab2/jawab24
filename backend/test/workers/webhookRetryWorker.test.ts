@@ -17,7 +17,10 @@ vi.mock('../../src/services/ecommerce', () => ({
 }));
 
 const mockRegistryGet = vi.fn();
-vi.mock('../../src/integrations/registry', () => ({
+vi.mock('../../src/integrations/registry', async (importOriginal) => ({
+    // `toStoreForWebhooks` keeps its REAL implementation — stubbing the picker
+    // would hide a dropped credential, which is the bug it exists to prevent.
+    ...(await importOriginal<typeof import('../../src/integrations/registry')>()),
     integrationRegistry: { get: (name: string) => mockRegistryGet(name) },
 }));
 
@@ -27,12 +30,16 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 
 // Capture the processor function passed to `new Worker(name, processor, opts)`.
 let capturedProcessor: ((job: { id: string; data: { storeId: string; platform: string } }) => Promise<void>) | null = null;
+/** Worker event handlers, so the retry-exhaustion path is reachable from a test. */
+const capturedHandlers = new Map<string, (...args: unknown[]) => unknown>();
 
 vi.mock('bullmq', () => ({
     Worker: vi.fn().mockImplementation((_name: string, processor: (...args: unknown[]) => unknown) => {
         capturedProcessor = processor as typeof capturedProcessor;
         return {
-            on: vi.fn(),
+            on: vi.fn((event: string, handler: (...args: unknown[]) => unknown) => {
+                capturedHandlers.set(event, handler);
+            }),
             close: vi.fn().mockResolvedValue(undefined),
         };
     }),
@@ -56,6 +63,7 @@ const PLATFORMS: Array<'shopify' | 'salla' | 'zid'> = ['shopify', 'salla', 'zid'
 beforeEach(async () => {
     vi.clearAllMocks();
     capturedProcessor = null;
+    capturedHandlers.clear();
     await stopWebhookRetryWorker();
     startWebhookRetryWorker();
     if (!capturedProcessor) throw new Error('Worker mock did not capture the processor');
@@ -125,6 +133,39 @@ describe.each(PLATFORMS)('webhookRetryWorker (%s)', (platform) => {
 
         expect(mockRegistryGet).not.toHaveBeenCalled();
         expect(mockSaveWebhookStatus).not.toHaveBeenCalled();
+    });
+
+    it('carries alreadyRegistered through the exhaustion marker instead of erasing it', async () => {
+        // The exhaustion marker rebuilds webhookStatus from the previous row, so
+        // anything it forgets to copy is destroyed — at exactly the moment the
+        // store is stuck and the diagnostic matters most. `alreadyRegistered`
+        // records which topics Zid rejected as duplicates, and with which status;
+        // it is the only evidence distinguishing "the subscription already existed"
+        // from "we just created a second one".
+        mockGetStoreById.mockResolvedValue({
+            id: 'store-1',
+            platformData: {
+                webhookStatus: {
+                    registered: ['product.create', 'order.create'],
+                    failed: [{ topic: 'product.update', status: 400 }],
+                    alreadyRegistered: [{ topic: 'product.create', status: 400 }],
+                },
+            },
+        });
+
+        const onFailed = capturedHandlers.get('failed');
+        expect(onFailed).toBeDefined();
+        await onFailed!(
+            { id: 'job-1', data: { storeId: 'store-1', platform }, attemptsMade: 3, opts: { attempts: 3 } },
+            new Error('boom'),
+        );
+        // markWebhookStatusExhausted is fire-and-forget inside the handler.
+        await vi.waitFor(() => expect(mockSaveWebhookStatus).toHaveBeenCalled());
+
+        expect(mockSaveWebhookStatus).toHaveBeenCalledWith('store-1', expect.objectContaining({
+            exhausted: true,
+            alreadyRegistered: [{ topic: 'product.create', status: 400 }],
+        }));
     });
 
     it('skips demo stores — placeholder tokens cannot be decrypted (JAWAB24-BACKEND-19)', async () => {

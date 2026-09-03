@@ -3,7 +3,7 @@ import { config } from '../config';
 import { WEBHOOK_RETRY_QUEUE, WebhookRetryJobData } from '../lib/webhookRetryQueue';
 import { getStoreById, saveWebhookStatus } from '../services/ecommerce';
 import { isDemoStore } from '../services/demoStore';
-import { integrationRegistry } from '../integrations/registry';
+import { integrationRegistry, toStoreForWebhooks } from '../integrations/registry';
 import { captureError } from '../utils/sentryHelpers';
 import { Logger, noopLogger } from '../types';
 
@@ -41,14 +41,7 @@ async function processJob(job: Job<WebhookRetryJobData>): Promise<void> {
         return;
     }
 
-    const status = await adapter.registerWebhooks({
-        id: store.id,
-        storeDomain: store.storeDomain,
-        accessToken: store.accessToken,
-        accessTokenIv: store.accessTokenIv,
-        authorizationToken: store.authorizationToken,
-        authorizationTokenIv: store.authorizationTokenIv,
-    });
+    const status = await adapter.registerWebhooks(toStoreForWebhooks(store));
     await saveWebhookStatus(storeId, status);
     if (status.failed.length > 0) {
         // Throw so BullMQ schedules the next attempt with exponential backoff.
@@ -99,12 +92,21 @@ export function startWebhookRetryWorker(): Worker {
 async function markWebhookStatusExhausted(storeId: string, errorMessage: string): Promise<void> {
     const store = await getStoreById(storeId);
     const platformData = (store?.platformData as Record<string, unknown> | null) ?? {};
-    const existing = (platformData.webhookStatus as { registered?: string[]; failed?: unknown[] } | undefined) ?? null;
+    const existing = (platformData.webhookStatus as {
+        registered?: string[];
+        failed?: unknown[];
+        alreadyRegistered?: Array<{ topic: string; status: number }>;
+    } | undefined) ?? null;
     await saveWebhookStatus(storeId, {
         registered: existing?.registered ?? [],
         failed: (existing?.failed as Array<{ topic: string; status?: number; error?: string }>) ?? [{ topic: 'unknown', error: errorMessage }],
         lastAttempt: new Date().toISOString(),
         exhausted: true,
+        // Carry the last attempt's per-topic duplicate statuses through. This
+        // marker is written right after the attempt that produced them, and
+        // dropping them here would erase the diagnostic exactly when the store
+        // is stuck and it is most needed.
+        ...(existing?.alreadyRegistered ? { alreadyRegistered: existing.alreadyRegistered } : {}),
     });
 }
 
