@@ -96,6 +96,18 @@ export function captureUnexpectedError(
 }
 
 /**
+ * Detach the user context set at login (`store.setAuth`).
+ *
+ * Every place that drops a session must call this, or errors raised afterwards
+ * are still attributed to whoever last signed in on this device — which is
+ * actively misleading when the session ended precisely BECAUSE the tab stopped
+ * belonging to that person (see authManager.clearLocalSession).
+ */
+export function clearSentryUser() {
+  Sentry.setUser(null);
+}
+
+/**
  * Add a breadcrumb to Sentry for context without creating an event.
  * Use for non-critical errors that should appear in the trail of a real error.
  */

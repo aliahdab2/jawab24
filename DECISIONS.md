@@ -4210,3 +4210,104 @@ send-path channel guard (`customerNotifications.test.ts`), the OTP transport thr
 column DEFAULT — verified directly in the test database as `'whatsapp'`). Suites proven green:
 backend 8076 unit + 651 integration, frontend 3207, shared 793; lint, `tsc` on both workspaces,
 translations and the duplication gate all clean.
+
+## D-124 · A tab whose session cookie has changed hands drops LOCAL state only — the identity check is `/auth/me`'s `id`, and revoking the server session is forbidden (2026-09-03)
+
+**Ruling.** `syncSessionState` compares the `id` in the `/auth/me` response against the persisted
+`user.id` on every authenticated page mount — from BOTH protected layouts (`DashboardLayout` and
+`AdminLayout`, which do not nest), via `hooks/useSessionSync`. When they differ the tab **adopts the
+new session**: one `window.location.reload()`, at most once per hand-over. Only when that does not
+settle it does the tab clear **local session state only** — `authManager.clearLocalSession`, which
+touches localStorage, the zustand store and the Sentry user context, and deliberately does NOT call
+`/auth/logout` — and navigate to a `signedOutPath()` resolved BEFORE the clear. `isAdmin` is
+reconciled from the same response alongside `isPartner` but in ONE direction only (revocation), and
+a `403 ADMIN_REQUIRED` from any endpoint clears a stale `isAdmin` in the interceptor as a net,
+except inside a platform frame.
+
+**The failure it closes.** On web the session is an HttpOnly cookie owned by the browser *profile*,
+while the identity rendered on screen — name, picture, `isAdmin` — comes from the zustand store in
+localStorage. Sign in as a second account in any tab of that profile and the cookie is replaced
+while the other tabs' persisted stores are not. **Nothing 401s**: the new cookie is a perfectly
+valid session, merely not the one that tab was built for, so the 401 interceptor never fires and no
+other code path compares identities. The tab stays wedged indefinitely — previous account in the
+chrome, every request answered for the new one — until someone logs out by hand. Reported
+2026-09-03: the admin area rendered its full shell with "0 customers" over "Failed to load
+customers", because `AdminLayout` gates on the persisted `isAdmin` (stale `true`) while the backend,
+reading the session it actually received, returned 403 `ADMIN_REQUIRED`. `/auth/me` has always
+returned `id`; the client threw it away and compared only `isPartner`.
+
+**Why a server logout is forbidden here, not merely unnecessary.** The obvious implementation —
+"call the existing `logout()`" — revokes the refresh-token family behind the shared cookie, which is
+the session the merchant is *actively using in the tab they just signed in on*. That fixes the stale
+tab by breaking the working one, and does it on a background page-mount request the merchant never
+initiated. Local state is the only thing that is wrong when a session changes hands, so it is the
+only thing that may be cleared. `clearLocalSession` exists as a separate method rather than a flag
+on `logout()` so that the restraint is structural: `logout()` layers the server half on top of it,
+and no caller can reach the server half by accident. Pinned by an explicit test that
+`clearLocalSession` never calls `publicApi.post`.
+
+**Why a full page load rather than a router push.** A client-side route change leaves the mounted
+React tree holding the departed user in component state; only a document load guarantees every
+consumer is rebuilt from the cleared store.
+
+**Why ADOPT rather than clear — the persisted store is profile-wide, not per tab.** On web
+`store.partialize` persists `user`, `isAuthenticated`, `workspaces` and `activeWorkspaceId` into ONE
+localStorage key, `auth-storage`, shared by every tab of the browser profile. Clearing it to fix the
+stale tab therefore reaches the tab that OWNS the live session: it keeps working from memory, and on
+its next reload rehydrates empty and lands on `/login` — which bounces only on the store's
+`isAuthenticated` and never probes the cookie — so the merchant re-authenticates a session that was
+never broken. That is the same shape of mistake as calling `/auth/logout` (fixing this tab by
+breaking the working one), one layer down. And the correct state is already sitting in that shared
+key: the tab that just signed in wrote the new user into it. So a **reload** rebuilds the stale tab
+as the right account with nothing dropped, and exposes nothing new — every request from that tab was
+already being answered for the new user. The clear survives only as the fallback for when there is
+nothing correct to adopt (a native Bearer session, a storage-denied frame, a session handed over
+without `setAuth`), bounded to one attempt by a `sessionStorage` marker whose WRITE must land first
+— a frame that denies storage would otherwise reload forever.
+
+**Why the signed-out destination is resolved before the clear.** `clearLocalSession` calls
+`clearEmbeddedSession()`, which removes the `jawab24:embedded:platform` key that `signedOutPath()`
+reads back through `getEmbeddedPlatform()`. Asking afterwards can therefore only ever answer
+`/login`, and inside a platform dashboard that is the sign-in prompt the embedded flow exists to
+remove (D-A; Zid rejection 2026-08-10). `authManager.logout()` already captured it before its own
+clear for exactly this reason; this path now does the same.
+
+**Why `isAdmin` is revocation-only.** `/auth/me` resolves it from `users.is_admin`, while the gate on
+every admin route (`routes/admin.ts` → `requireAdmin` in `middleware/auth.ts`) reads the copy cached
+in the access token — "refreshed on token rotation every 15 min". Promoting the store from the
+database would render `AdminLayout`, which gates on this flag, against a session the gate still
+refuses: the shell-renders-while-every-panel-403s state this ruling exists to close, manufactured
+through a second door, with the ADMIN_REQUIRED net writing the flag straight back to false — two
+writers flapping until the token rotates. A grant is picked up at the next login or rotation, which
+is when the gate starts honouring it. A revocation is always safe to apply early. Aligning the two
+sources instead (pointing `routes/admin.ts` at the database-reading `requireAdmin` in
+`middleware/admin.ts`) is the deeper fix and is deliberately NOT taken here — it widens a
+client-session change into the backend admin gate.
+
+**Why the ADMIN_REQUIRED net stops at a platform frame.** Both middlewares return that same code for
+a restricted embedded session *even when the account is a real admin* — they refuse on
+`embeddedPlatform` before reading `is_admin`. In a frame the 403 says nothing about the account,
+while the write is profile-wide, so it would strip the flag from the merchant's ordinary web tabs.
+
+**Why the hand-over is an event, not a breadcrumb.** A breadcrumb only ever ships attached to a later
+error, and both recoveries end the document — so the original implementation could not count how
+often sessions change hands, which is exactly why the reported 403 could only be inferred rather
+than observed.
+
+**Bounds.** Both ids must be present for the check to fire — a response without an `id` or a store
+predating this check is *missing data*, not evidence of a different user, and reading it as one
+would sign merchants out of working sessions. Native is unaffected in practice (the Bearer token in
+localStorage *is* the identity, so there is no shared jar to change underneath it), but the check is
+platform-agnostic like the rest of `syncSessionState` — see the no-platform-branch note there.
+
+**Rejected.** (a) *Reuse `logout()`* — revokes the refresh-token family behind the shared cookie,
+i.e. the session the merchant is actively using in the tab they just signed in on. (b) *Clear local
+state as the primary recovery* — wipes the profile-wide `auth-storage` key and puts the working tab
+behind a login wall on its next reload; kept only as the bounded fallback. (c) *Patch the flags onto
+the stale user* — leaves the previous account's name, picture and workspaces on screen and merely
+stops the admin shell rendering: the crossed state, tidied up. (d) *A router push instead of a
+document load* — leaves the mounted React tree holding the departed user in component state. (e)
+*Make `/auth/me` mirror the access token's `isAdmin`* so promotion becomes safe — it makes the store
+honest about the session but hides an area the database says the user owns, and it is a backend
+contract change in service of a client bug.
+

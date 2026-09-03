@@ -26,7 +26,7 @@ import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggleButton } from '@/components/ui/ThemeToggleButton';
 import { NavCountBadge } from '@/components/ui/NavCountBadge';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
-import { syncSessionState } from '@/lib/sessionSync';
+import { useSessionSync } from '@/hooks/useSessionSync';
 // Direct import: the '@/features/demo' barrel also exports DemoLoginButton,
 // which reaches the '@/components/ui' barrel -> '@jawab24/shared'. The layout
 // only needs the banner.
@@ -164,15 +164,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
   const pageTitle = title || tDashboard('title');
 
-  useEffect(() => {
-    // Verifies the standing session AND re-reads server-resolved flags
-    // (isPartner). Runs on every platform — see the no-platform-branch note in
-    // lib/sessionSync.ts; gating it on web froze the Partner nav entry inside
-    // the app, which is the only surface that cannot reach /partner by URL.
-    if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
-      syncSessionState();
-    }
-  }, [_hasHydrated, isAuthenticated]);
+  // Verifies the standing session, WHO it belongs to, and the server-resolved
+  // flags. Shared with AdminLayout — see useSessionSync.
+  useSessionSync(_hasHydrated && isAuthenticated);
 
   useEffect(() => {
     if (_hasHydrated && !isAuthenticated && !isPublic) {

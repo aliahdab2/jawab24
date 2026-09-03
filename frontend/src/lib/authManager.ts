@@ -14,7 +14,7 @@
  */
 
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureError, addErrorBreadcrumb, clearSentryUser } from '@/lib/sentryHelpers';
 import { tError } from '@/lib/i18nErrors';
 import { AUTH_BRIDGE_PATHS } from '@/constants/auth';
 import { isEmbeddedSession, refreshEmbeddedToken, clearEmbeddedSession, getEmbeddedPlatform } from '@/lib/embeddedSession';
@@ -124,6 +124,56 @@ class AuthManager {
   }
 
   /**
+   * Drop LOCAL session state only — the server session is left completely
+   * alone. No `/auth/logout`, no cookie clearing, no push-token revocation.
+   *
+   * ⛔ That restraint is the whole point, and it is why this is not `logout()`
+   * behind a flag. The web session lives in an HttpOnly cookie shared by every
+   * tab of the browser PROFILE, so when this runs because the cookie now
+   * belongs to a DIFFERENT user (lib/sessionSync), a server logout would revoke
+   * the session the merchant is actively using in the tab they just signed in
+   * on — fixing this tab's stale state by breaking the working one. Local state
+   * is the only thing that is wrong here, so it is the only thing cleared.
+   *
+   * `logout()` layers the server-side half on top of this.
+   */
+  async clearLocalSession(reason?: string): Promise<void> {
+    if (reason) {
+      addErrorBreadcrumb('auth', reason);
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      clearEmbeddedSession();
+    }
+
+    // Async import: `lib/api` ↔ `lib/store` is a cycle at module load.
+    try {
+      const { useAuthStore } = await import('./store');
+      // setState directly — the store's own `logout` calls back into the API.
+      useAuthStore.setState({
+        user: null,
+        token: null,
+        fbToken: null,
+        isAuthenticated: false,
+        workspaces: [],
+        activeWorkspaceId: null,
+      });
+    } catch (e) {
+      // Tag deliberately unchanged from when this block lived inside logout():
+      // it is the established signal for "dropping local auth state failed",
+      // and saved Sentry searches and alerts are keyed on it. The failure is
+      // the same one whichever caller reached it.
+      captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-logout' } });
+    }
+
+    clearSentryUser();
+
+    this.notifyAuthStateChange(false);
+  }
+
+  /**
    * Centralized logout - clears all auth state
    * This is the ONLY place logout should happen to ensure consistency
    */
@@ -163,31 +213,8 @@ class AuthManager {
         }
       }
 
-      // 1. Clear local storage first (synchronous, always works)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        clearEmbeddedSession();
-      }
-
-      // 2. Clear Zustand store (async import to avoid circular deps)
-      try {
-        const { useAuthStore } = await import('./store');
-        // Use setState directly to avoid calling the store's logout which hits the API
-        useAuthStore.setState({
-          user: null,
-          token: null,
-          fbToken: null,
-          isAuthenticated: false,
-          workspaces: [],
-          activeWorkspaceId: null,
-        });
-      } catch (e) {
-        captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-logout' } });
-      }
-
-      // 3. Notify listeners
-      this.notifyAuthStateChange(false);
+      // 1-3. Every piece of local session state, plus the listeners.
+      await this.clearLocalSession();
 
       // 4. Try to call server logout (non-blocking, best effort)
       // This clears HttpOnly cookies and revokes refresh token
@@ -309,6 +336,36 @@ class AuthManager {
           } catch {
             return Promise.reject(error);
           }
+        }
+
+        // 403 ADMIN_REQUIRED: the persisted store claims this device is an
+        // admin and the server — reading the session it actually received —
+        // says it is not. The store is the stale one; correct it so AdminLayout
+        // redirects off the admin area instead of rendering a shell whose every
+        // panel 403s ("Failed to load customers" over "0 customers").
+        //
+        // A net, not the fix: sessionSync catches the usual cause (the cookie
+        // now belongs to another user) on mount. This also covers the flag
+        // being revoked mid-session, which nothing else would notice until the
+        // next page mount.
+        if (status === 403 && errorCode === 'ADMIN_REQUIRED') {
+          // ⛔ Only outside a platform frame. The backend returns this SAME code
+          // for a restricted embedded session even when the account IS a
+          // Jawab24 admin — both `middleware/auth.ts` and `middleware/admin.ts`
+          // refuse on `embeddedPlatform` before they ever look at `is_admin`.
+          // So in a frame this 403 says nothing about the account, while the
+          // write it would trigger is profile-wide: `auth-storage` is one
+          // localStorage key shared by every tab, so it would strip the flag
+          // from the merchant's ordinary web tabs too.
+          if (isEmbeddedSession()) {
+            addErrorBreadcrumb('auth', 'ADMIN_REQUIRED in an embedded session — admin flag left alone');
+            return Promise.reject(error);
+          }
+          const { useAuthStore } = await import('./store');
+          if (useAuthStore.getState().user?.isAdmin) {
+            useAuthStore.getState().updateUser({ isAdmin: false });
+          }
+          return Promise.reject(error);
         }
 
         // 403 INSUFFICIENT_ROLE: user tried an action above their permission level

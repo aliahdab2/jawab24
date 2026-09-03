@@ -15,6 +15,7 @@ import type { AxiosResponse } from 'axios';
 import { createMockAxios, axiosErrorWith } from './testUtils/mockAxios';
 
 // Mock the store module before importing authManager
+const mockUpdateUser = vi.fn();
 vi.mock('../lib/store', () => ({
   useAuthStore: {
     setState: vi.fn(),
@@ -27,6 +28,9 @@ vi.mock('../lib/store', () => ({
       // Omitting it here makes a successful refresh throw and report FAILURE —
       // the hand-rolled-mock trap: the mock, not the code, decides the verdict.
       setToken: vi.fn(),
+      // Same trap for the 403 ADMIN_REQUIRED path, which corrects the stale
+      // admin flag through this action.
+      updateUser: (...args: unknown[]) => mockUpdateUser(...args),
     })),
   },
 }));
@@ -38,11 +42,16 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
-// Mock sentryHelpers
+// Mock sentryHelpers.
+// ⛔ EXHAUSTIVE: a factory mock replaces the module wholesale, so every export
+// authManager imports must appear here. Omit one and the failure is not a
+// missing-mock message but a TypeError deep inside a logout.
 const mockCaptureError = vi.fn();
+const mockClearSentryUser = vi.fn();
 vi.mock('../lib/sentryHelpers', () => ({
   captureError: (...args: unknown[]) => mockCaptureError(...args),
   addErrorBreadcrumb: vi.fn(),
+  clearSentryUser: () => mockClearSentryUser(),
 }));
 
 describe('AuthManager', () => {
@@ -177,6 +186,71 @@ describe('AuthManager', () => {
       
       // Should be safe to call multiple times
       expect(() => unsubscribe()).not.toThrow();
+    });
+  });
+
+  // ============================================================================
+  // LOCAL-ONLY SESSION CLEAR
+  // ============================================================================
+  describe('clearLocalSession', () => {
+    /**
+     * The invariant the whole method exists for. On web the session cookie is
+     * shared by every tab of the browser profile, so this runs when the cookie
+     * has been replaced by ANOTHER user's valid session (lib/sessionSync). A
+     * server logout would revoke that session — the one the merchant is
+     * actively using in the tab they just signed in on. Clearing this tab by
+     * breaking the working one is the failure mode, and nothing about it shows
+     * up in a green "logout works" test, so it is pinned here.
+     */
+    it('never touches the server session', async () => {
+      const { publicApi } = await import('../lib/api');
+
+      await authManager.clearLocalSession();
+
+      expect(publicApi.post).not.toHaveBeenCalled();
+    });
+
+    it('clears localStorage and the zustand store', async () => {
+      const { useAuthStore } = await import('../lib/store');
+
+      await authManager.clearLocalSession();
+
+      expect(localStorage.removeItem).toHaveBeenCalledWith('token');
+      expect(localStorage.removeItem).toHaveBeenCalledWith('user');
+      expect(useAuthStore.setState).toHaveBeenCalledWith({
+        user: null,
+        token: null,
+        fbToken: null,
+        isAuthenticated: false,
+        workspaces: [],
+        activeWorkspaceId: null,
+      });
+    });
+
+    /**
+     * Errors raised after the session is dropped must not be filed against
+     * whoever last signed in on this device — least of all here, where the tab
+     * stopped belonging to that person.
+     */
+    it('detaches the Sentry user context', async () => {
+      await authManager.clearLocalSession();
+
+      expect(mockClearSentryUser).toHaveBeenCalled();
+    });
+
+    it('notifies auth state listeners that the session is gone', async () => {
+      const listener = vi.fn();
+      authManager.onAuthStateChange(listener);
+
+      await authManager.clearLocalSession();
+
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it("stays put — navigation is the caller's decision", async () => {
+      await authManager.clearLocalSession();
+
+      expect(window.location.href).toBe('/dashboard');
     });
   });
 
@@ -418,6 +492,94 @@ describe('AuthManager', () => {
       
       await expect(mockAxios.response.onRejected(error403)).rejects.toBeDefined();
       expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The shipped symptom (2026-09-03): the admin area rendered its whole
+     * shell — AdminLayout gates on the PERSISTED `isAdmin` — while every panel
+     * inside it 403'd, so the page read "0 customers" above "Failed to load
+     * customers" with no way out but a manual logout. The store was the stale
+     * side; the server, reading the session it actually received, was right.
+     */
+    it('corrects a stale admin flag on 403 ADMIN_REQUIRED', async () => {
+      const { useAuthStore } = await import('../lib/store');
+      vi.mocked(useAuthStore.getState).mockReturnValue({
+        user: { id: 'u-1', isAdmin: true },
+        updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+      } as unknown as ReturnType<typeof useAuthStore.getState>);
+
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const error = axiosErrorWith(403, { url: '/admin/customers' }, { code: 'ADMIN_REQUIRED' });
+
+      await expect(mockAxios.response.onRejected(error)).rejects.toBeDefined();
+      expect(mockUpdateUser).toHaveBeenCalledWith({ isAdmin: false });
+    });
+
+    /**
+     * A non-admin hitting an admin route is the ordinary case (a stale link, a
+     * probe). The store already says what the server says, so writing it again
+     * would rewrite persisted localStorage on every such response.
+     */
+    it('writes nothing when the store already agrees it is not an admin', async () => {
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const error = axiosErrorWith(403, { url: '/admin/customers' }, { code: 'ADMIN_REQUIRED' });
+
+      await expect(mockAxios.response.onRejected(error)).rejects.toBeDefined();
+      expect(mockUpdateUser).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Correcting the flag is not resolving the request. The caller still has to
+     * see the failure — swallowing it would show an empty admin table as
+     * though it were an empty result set.
+     */
+    it('still rejects the ADMIN_REQUIRED response after correcting the flag', async () => {
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const error = axiosErrorWith(403, { url: '/admin/customers' }, { code: 'ADMIN_REQUIRED' });
+      const refreshSpy = vi.spyOn(authManager, 'refreshToken');
+
+      await expect(mockAxios.response.onRejected(error)).rejects.toBe(error);
+      expect(refreshSpy).not.toHaveBeenCalled();
+      expect(mockAxios.retry).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⛔ The backend returns ADMIN_REQUIRED for a RESTRICTED embedded session
+     * even when the account IS a Jawab24 admin — both `middleware/auth.ts` and
+     * `middleware/admin.ts` refuse on `embeddedPlatform` before they ever look
+     * at `is_admin`. So inside a platform frame this 403 says nothing about the
+     * account, while the write it would trigger is profile-wide: `auth-storage`
+     * is one localStorage key shared by every tab, so it would strip the flag
+     * from the merchant's ordinary web tabs too.
+     *
+     * Uses the real `embeddedSession` module rather than a mock — the marker it
+     * reads is the actual thing production reads.
+     */
+    it('leaves the admin flag alone on ADMIN_REQUIRED inside a platform frame', async () => {
+      const { useAuthStore } = await import('../lib/store');
+      vi.mocked(useAuthStore.getState).mockReturnValue({
+        user: { id: 'u-1', isAdmin: true },
+        updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+      } as unknown as ReturnType<typeof useAuthStore.getState>);
+      window.sessionStorage.setItem('jawab24:embedded:platform', 'zid');
+
+      try {
+        const mockAxios = createMockAxios();
+        authManager.setupAuthInterceptor(mockAxios.instance);
+
+        const error = axiosErrorWith(403, { url: '/admin/customers' }, { code: 'ADMIN_REQUIRED' });
+
+        await expect(mockAxios.response.onRejected(error)).rejects.toBe(error);
+        expect(mockUpdateUser).not.toHaveBeenCalled();
+      } finally {
+        window.sessionStorage.removeItem('jawab24:embedded:platform');
+      }
     });
 
     it('should reject errors without response object', async () => {

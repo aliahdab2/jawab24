@@ -603,6 +603,58 @@ away in milliseconds and can lose the rotation's Set-Cookie mid-teardown
 (`authManager.isOnAuthBridgePage`). Token hashing uses the shared `sha256Hex`
 (`backend/src/utils/hash.ts`).
 
+**Client-side session reconciliation (`frontend/src/lib/sessionSync.ts`)** — one
+`/auth/me` per authenticated page mount, from BOTH protected layouts
+(`DashboardLayout` and `AdminLayout`, which do not nest) through the shared
+`hooks/useSessionSync`. The admin area needs its own call: it is the screen the
+cross-tab defect was reported on, and with only the dashboard calling this the
+identity check never ran there. It answers three questions, and the second is
+the non-obvious one:
+
+1. *Is the session still live?* `isAuthenticated` is optimistic, read from the
+   persisted store so the shell paints instantly. A revoked session surfaces here
+   as a 401 and the interceptor takes it from there.
+2. *Whose session is it?* The response's `id` is compared against the persisted
+   `user.id`. On web the session is an HttpOnly cookie owned by the browser
+   **profile**, while the identity on screen — name, picture, `isAdmin` — comes
+   from localStorage. Signing in as a second account in any tab of that profile
+   replaces the cookie and leaves every other tab's persisted store untouched, so
+   the two disagree about who is signed in. **Nothing 401s** — the new cookie is a
+   perfectly valid session, just not the one that tab was built for — so this
+   comparison is the only thing in the product that can detect it. Without it the
+   tab renders the previous account's identity over data fetched for the new one,
+   indefinitely (shipped symptom, 2026-09-03: the admin area rendering "0
+   customers" above "Failed to load customers", because `AdminLayout` gates on the
+   stale persisted `isAdmin` while the server 403s `ADMIN_REQUIRED`).
+   On mismatch the tab **adopts** the new session — one `window.location.reload()`,
+   bounded to a single attempt by a `sessionStorage` marker. That works because
+   `auth-storage` is ONE localStorage key for the whole browser profile and the
+   tab that just signed in already wrote the new user into it; clearing it
+   instead would leave the tab that OWNS the live session facing a login wall on
+   its next reload. Only if the reload does not settle it is **local state
+   only** dropped, via `authManager.clearLocalSession` — never `/auth/logout`,
+   which would revoke the session the merchant is actively using in the tab they
+   just signed in on (D-124) — followed by a full page load to a
+   `signedOutPath()` resolved BEFORE the clear, because the clear removes the
+   embedded-platform marker that path depends on (D-A).
+3. *What have the server-resolved flags become?* `isPartner` (the `partners`
+   table) and `isAdmin` (`users.is_admin`) are both decided server-side and can
+   change while a device stays signed in; login is the only other place they are
+   resolved. Patched only on a real change — the store is persisted, so an
+   unconditional write would rewrite localStorage on every page mount. `isAdmin`
+   moves in ONE direction here, revocation only: the admin-route gate reads the
+   flag cached in the access token, so promoting from the database would render
+   the admin shell against a session the gate still refuses (D-124).
+
+As a net for (2) and (3), a `403 ADMIN_REQUIRED` from any endpoint clears the
+stale `isAdmin` in the interceptor, which is what makes `AdminLayout` redirect
+instead of rendering a shell whose every panel fails — except inside a platform
+frame, where the backend returns that same code for a restricted session even
+when the account IS an admin. Every hand-over is reported to Sentry as its own
+event rather than a breadcrumb, since both recoveries end the document.
+Regression coverage: `frontend/src/lib/__tests__/sessionSync.test.ts`,
+`frontend/src/__tests__/authManager.test.ts`.
+
 **Facebook OAuth (secondary):**
 ```
 1. User clicks "Login with Facebook" → Facebook OAuth redirect
