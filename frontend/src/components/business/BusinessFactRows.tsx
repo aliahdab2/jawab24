@@ -112,7 +112,15 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
             {phones.map((p, i) => (
               <span key={i} className="inline-flex items-center gap-1">
                 {i > 0 && <span aria-hidden="true" className="text-subtle">·</span>}
-                <span>{p.number}</span>
+                {/* ⭐ <bdi>, not a bare span: a phone number is several
+                    digit runs separated by spaces, and each space between two
+                    numbers takes the RTL paragraph level (UBA N1 — numbers act
+                    as R for neutral resolution). Unisolated, «+46 70 022 47 20»
+                    therefore PAINTS as «20 47 022 70 46+» in the Arabic
+                    dashboard. Same class the phone INPUT already fixes with
+                    dir="ltr" (BusinessFactSheet) and renderMessageText with
+                    <span dir="ltr"> (PR #658). */}
+                <bdi>{p.number}</bdi>
                 {/* The purpose the merchant gave this line, muted so the number
                     stays the thing the eye lands on. */}
                 {p.description && (
@@ -191,21 +199,45 @@ export function BusinessFactRows({ page, onEditFact, onEditHours, readOnly = fal
                   </span>
                   {/* The prompt sits where the value will be — one line does the
                       job of the old "not set" + "set" pair. */}
-                  {/* No dir="auto" here: a digits-only value (a phone number) has
-                      no STRONG directional character, so `auto` falls back to LTR
-                      and left-aligns the whole row's value in an RTL page. Letting
-                      it inherit the page direction keeps every row aligned, while
-                      bidi still renders the digit run itself left-to-right. */}
+                  {/* ⛔ dir="auto" is still wrong on this BLOCK: a digits-only
+                      value has no strong directional character, so `auto` falls
+                      back to LTR and left-aligns the whole row in an RTL page.
+                      But the conclusion that followed it — "bidi still renders
+                      the digit run itself left-to-right" — is only true of ONE
+                      run. A phone number, a URL with a trailing slash, and an
+                      hours range are SEVERAL runs joined by neutrals, and in an
+                      RTL paragraph those neutrals take the RTL level, so the runs
+                      are laid out right-to-left:
+                        +46 70 022 47 20     ->  20 47 022 70 46+
+                        https://jawab24.com/ ->  /https://jawab24.com
+                        00:00-23:59          ->  23:59-00:00
+                      All three shipped, and all three are visible in a single
+                      screenshot of the Arabic Business facts list.
+                      The fix is an inline <bdi> around the VALUE: it isolates the
+                      value's internal direction without touching the block's
+                      direction, so the row stays right-aligned (what dropping
+                      dir="auto" was protecting) AND the runs inside keep their
+                      order. Do not "simplify" this back to a bare span.
+                      ⚠️ jsdom does no bidi layout, so a test can assert the
+                      element, never the painted order — that needs real Chrome. */}
                   <span
                     className={`block text-xs truncate mt-0.5 ${row.covered ? 'text-muted-foreground' : 'text-brand-600'}`}
                   >
                     {isSet
-                      ? (row.valueNode ?? (row.value || t('facts.isSet')))
+                      ? (row.valueNode ?? <bdi>{row.value || t('facts.isSet')}</bdi>)
                       : hasSuggestion
                         // The value the merchant never typed, shown AS what it
                         // is — a Facebook copy awaiting review. Members see it
                         // too (it's state, not an errand).
-                        ? t('facts.fromFacebook', { value: row.suggestedValue ?? '' })
+                        // The value is isolated on its own: wrapping the whole
+                        // sentence would resolve RTL from «من» and leave the
+                        // number's runs reordered inside it.
+                        ? (
+                          <>
+                            {t('facts.fromFacebookPrefix')}{' '}
+                            <bdi>{row.suggestedValue ?? ''}</bdi>
+                          </>
+                        )
                         : row.storeAnswered
                           ? t('facts.storeAnswered')
                           : readOnly
