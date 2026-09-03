@@ -539,6 +539,46 @@ export const config = {
         replyToEmail: process.env.RESEND_REPLY_TO || '',
     },
 
+    // Invoicing — the supplier block printed on every manually-issued invoice.
+    //
+    // THREE printed fields: name, site, email. That is the whole supplier block
+    // on the house invoice (JW24-2026-0001, issued by hand 2026-08-08). An
+    // earlier draft of this feature also carried the legal name, registration
+    // number and registered address; the owner's own template omits all of it,
+    // so those keys were removed rather than left here unread. Do not
+    // reintroduce them without the owner asking — see utils/invoiceTemplate.ts.
+    //
+    // Config rather than constants so a change of address, brand name or
+    // contact is an env edit and a restart, not a release.
+    //
+    // The display name is per-language because the brand has two forms and the
+    // house invoice uses the Arabic one: «جواب24» on an Arabic invoice,
+    // "Jawab24" on an English one.
+    invoicing: {
+        displayName: process.env.INVOICE_DISPLAY_NAME || 'Jawab24',
+        displayNameAr: process.env.INVOICE_DISPLAY_NAME_AR || 'جواب24',
+        contactEmail: process.env.INVOICE_CONTACT_EMAIL || 'info@jawab24.com',
+        website: process.env.INVOICE_WEBSITE || 'jawab24.com',
+        // The number series. Changing it starts a NEW sequence from 1 — which
+        // is a bookkeeping decision, not a formatting one, so it lives here
+        // where it is visible rather than being hardcoded in the allocator.
+        series: process.env.INVOICE_SERIES || 'JW24',
+        // Headless browser used to render the PDF. Deliberately EMPTY by
+        // default: an unset value makes invoicePdf.ts probe the known Alpine
+        // locations, which is safer than baking in a path that has moved
+        // between Alpine releases. Set it to override (a developer on macOS
+        // points it at their own Chrome). Not bundled with puppeteer-core on
+        // purpose — see services/invoicePdf.ts.
+        chromiumPath: process.env.CHROMIUM_PATH || '',
+        // Printed verbatim under the totals. Our customers are outside the EU,
+        // where Swedish VAT does not apply; the REASON is a required part of a
+        // zero-rated invoice, so it is content, not a comment.
+        vatNoteAr: process.env.INVOICE_VAT_NOTE_AR
+            || 'خدمات مقدَّمة إلى عميل مقيم خارج الاتحاد الأوروبي، وهي خارج نطاق ضريبة القيمة المضافة السويدية.',
+        vatNoteEn: process.env.INVOICE_VAT_NOTE_EN
+            || 'Services supplied to a customer established outside the European Union; outside the scope of Swedish VAT.',
+    },
+
     // Object storage (S3-compatible) — merchant-uploaded images (Post Reply trigger
     // images today; reply-type-agnostic for future reuse). Provider-agnostic: point
     // the same code at Backblaze B2 / Cloudflare R2 / AWS S3 / self-hosted MinIO via

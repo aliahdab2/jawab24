@@ -704,9 +704,80 @@ export function validateSchema<Out, In = Out>(schema: z.ZodType<Out, z.ZodTypeDe
 }
 
 // ==========================================
+// Manual invoices
+// ==========================================
+
+/**
+ * A money field, in cents.
+ *
+ * The ceiling is 100,000,000 cents = 1,000,000 USD. Not a business limit — it
+ * is a typo guard. Every amount here is hand-typed by an admin, and the failure
+ * mode of a slipped decimal on a financial document sent to a customer is worse
+ * than a rejected form. The floor is 0, not 1: a zero-rated line (a courtesy
+ * period, a fully-discounted item) is legitimate, while a negative amount is a
+ * credit note, which is a different document with different rules.
+ */
+const invoiceCents = z.number().int('Amounts must be whole cents').min(0).max(100_000_000);
+
+export const CreateInvoiceSchema = z.object({
+    lang: z.enum(['ar', 'en']),
+    // The legal buyer, typed by the admin: usually the business, while the
+    // account is a person. Never defaulted from users.name silently.
+    customerName: z.string().trim().min(1, 'Customer name is required').max(255),
+    customerEmail: z.string().trim().email('Invalid customer email').max(255).optional(),
+    customerAddress: z.string().trim().max(1000).optional(),
+    lineDescription: z.string().trim().min(1, 'A line description is required').max(500),
+    lineDetail: z.string().trim().max(1000).optional(),
+    quantityLabel: z.string().trim().min(1).max(64),
+    // ISO strings on the wire, Dates in the service. Coerced here so the route
+    // is the only place that knows about the transport format.
+    periodStart: z.coerce.date().optional(),
+    periodEnd: z.coerce.date().optional(),
+    currency: z.string().trim().length(3, 'Currency must be a 3-letter code').toUpperCase(),
+    subtotalCents: invoiceCents,
+    vatCents: invoiceCents,
+    planId: z.string().uuid().optional(),
+    paymentMethod: z.string().trim().max(64).optional(),
+    notes: z.string().trim().max(2000).optional(),
+    // Set ONLY when the money is actually in — it renders a paid badge, and an
+    // invoice that wrongly claims payment is worse than useless.
+    paidAt: z.coerce.date().optional(),
+}).refine(
+    (v) => (v.periodStart === undefined) === (v.periodEnd === undefined),
+    { message: 'A billing period needs both a start and an end', path: ['periodEnd'] },
+).refine(
+    (v) => !v.periodStart || !v.periodEnd || v.periodEnd > v.periodStart,
+    { message: 'The period end must be after its start', path: ['periodEnd'] },
+);
+
+/**
+ * Sending an existing invoice. The attachment is NOT part of this input — the
+ * server attaches the archived PDF by id. Letting a caller supply the file
+ * would make "the invoice we sent" and "the invoice we stored" two different
+ * things, which is the one property this whole register exists to guarantee.
+ */
+export const SendInvoiceSchema = z.object({
+    subject: z.string().trim().min(1, 'Subject is required').max(500)
+        .refine(freeOfControlChars, 'Subject must not contain control characters'),
+    body: z.string().trim().min(1, 'Body is required').max(20_000)
+        .refine(freeOfNonWhitespaceControlChars, 'Body must not contain control characters'),
+    cc: z.array(z.string().trim().email('Invalid CC address').max(255)).max(MAX_EMAIL_CC).optional(),
+    bcc: z.array(z.string().trim().email('Invalid BCC address').max(255)).max(MAX_EMAIL_CC).optional(),
+    idempotencyKey: z.string().trim().min(8).max(256).optional(),
+});
+
+export const VoidInvoiceSchema = z.object({
+    // Required, and required to be substantive: a void with no stated reason is
+    // an unexplained hole in the register at audit time.
+    reason: z.string().trim().min(3, 'A reason is required to void an invoice').max(500),
+});
+
+// ==========================================
 // Export Types
 // ==========================================
 export type PaginationInput = z.infer<typeof PaginationSchema>;
+export type CreateInvoiceInputDto = z.infer<typeof CreateInvoiceSchema>;
+export type SendInvoiceInputDto = z.infer<typeof SendInvoiceSchema>;
 export type CreatePlanInput = z.infer<typeof CreatePlanSchema>;
 export type UpdatePlanInput = z.infer<typeof UpdatePlanSchema>;
 

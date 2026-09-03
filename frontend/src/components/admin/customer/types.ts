@@ -220,6 +220,13 @@ export type PaymentRequest = NonNullable<
     Awaited<ReturnType<typeof adminApi.listPaymentRequests>>['data']
 >[number];
 
+/** A row from adminApi.listInvoices (the manual invoice register). Derived from
+ *  the API's own return type, so a backend field change is a type error here
+ *  rather than an undefined at render time. */
+export type InvoiceSummary = NonNullable<
+    Awaited<ReturnType<typeof adminApi.listInvoices>>['data']
+>[number];
+
 /**
  * Section ids on the customer page. Also accepted as legacy ?tab= deep-link
  * values (the page used tabs before the two-column layout).

@@ -43,7 +43,30 @@ WORKDIR /app
 # 72 Arabic families and 0 Latin, so «دورة ICDL تبدأ اليوم» rendered the
 # Arabic correctly and drew I/C/D/L as codepoint tofu boxes on a real card.
 # font-noto covers the Latin/Greek/Cyrillic core.
-RUN apk add --no-cache dumb-init wget fontconfig font-noto-arabic font-noto
+#
+# chromium + its runtime libs: headless rendering of the manual invoice PDF
+# (services/invoicePdf.ts). Arabic needs bidi reordering and contextual glyph
+# shaping, which the drawing-primitive PDF libraries leave to the caller —
+# Chromium does both, and it is the engine the template was proofed against.
+#
+# `puppeteer-core` is deliberate: unlike `puppeteer` it downloads NO browser, so
+# the binary comes from apk here and `npm install` stays small for developers
+# and for the deploy gate. CHROMIUM_PATH points at it; a developer on macOS
+# overrides that to their own Chrome.
+#
+# Note the invoice's own Arabic face (Tajawal) is NOT installed here: it is
+# embedded into the rendered HTML as a data URI from backend/assets/fonts,
+# which arrives via the wholesale `COPY backend ./backend` below. That is
+# deliberate — an archived financial document must reproduce identically years
+# later, and a font resolved from the host depends on what the host has that
+# year. The Noto faces remain the fallback for a glyph the subset lacks.
+#
+# nss/freetype/harfbuzz are pulled in by the chromium package but are named
+# explicitly because they are the ones whose absence produces a SILENT failure
+# (blank glyphs, not a crash) — the same class of bug the font note below
+# records.
+RUN apk add --no-cache dumb-init wget fontconfig font-noto-arabic font-noto \
+    chromium nss freetype harfbuzz
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 # Get GIT_COMMIT from builder stage

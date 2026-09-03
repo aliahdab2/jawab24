@@ -27,9 +27,20 @@ function formatWith(
     lang: string,
     options: Intl.DateTimeFormatOptions,
     isoFallbackChars: number,
+    // Force Latin digits while keeping the locale's month names. Exactly one
+    // caller does this (`formatInvoiceDate`); see the reasoning there.
+    // Defaulting to false keeps every existing formatter unchanged.
+    //
+    // ⚠️ It appends `-u-nu-latn` rather than merely skipping `numeralLocale`.
+    // Skipping is NOT enough: Arabic locales default to the `arab` numbering
+    // system on their own, so a bare `ar-SY` still renders «١ أيلول ٢٠٢٦». That
+    // was a real bug in this function's first version, caught by a test that
+    // asserted the absence of Arabic-Indic digits.
+    latinDigits = false,
 ): string {
     try {
-        return new Intl.DateTimeFormat(numeralLocale(lang), options).format(d);
+        const locale = latinDigits ? `${lang}-u-nu-latn` : numeralLocale(lang);
+        return new Intl.DateTimeFormat(locale, options).format(d);
     } catch {
         return d.toISOString().slice(0, isoFallbackChars).replace('T', ' ');
     }
@@ -63,4 +74,35 @@ export function formatDateTimeShort(d: Date, lang: string): string {
  */
 export function formatDateLong(d: Date, lang: string): string {
     return formatWith(d, lang, { day: 'numeric', month: 'long' }, 10);
+}
+
+/**
+ * "1 September 2026" / "1 سبتمبر 2026" — full date, with LATIN digits in both
+ * languages.
+ *
+ * The deliberate exception to `numeralLocale` above, and the only one. Every
+ * merchant-facing surface renders Arabic in Arabic-Indic numerals because that
+ * is what reads naturally in an app; an invoice is a financial document that
+ * gets forwarded to an accountant, keyed into bookkeeping software, and matched
+ * against a bank statement — all of which are Latin-digit contexts. Arabic
+ * commercial invoices are conventionally issued this way for the same reason.
+ * The `latinDigits` flag on `formatWith` is what buys this: it skips
+ * `numeralLocale`, so `ar` keeps its month names while the digits stay Latin.
+ *
+ * Note the year is included, unlike `formatDateLong`: a document that outlives
+ * the conversation that produced it cannot rely on "this year" being obvious.
+ */
+export function formatInvoiceDate(d: Date, lang: string): string {
+    // Two locale substitutions, both matching the house invoice
+    // (JW24-2026-0001, issued by hand 2026-08-08):
+    //
+    //  • `ar` → `ar-SY`: LEVANTINE month names. Bare `ar` gives «8 أغسطس 2026»,
+    //    but the invoice says «8 آب 2026», which is what our Syrian and Lebanese
+    //    customers read as a date. This is a document convention, so it is NOT
+    //    generalised to the rest of the product's Arabic surfaces.
+    //  • `en` → `en-GB`: day-first. Bare `en` gives US order
+    //    ("September 1, 2026"), read as an error by customers in the Middle
+    //    East and Europe, and it would disagree with the Arabic side's shape.
+    const locale = lang === 'ar' ? 'ar-SY' : lang === 'en' ? 'en-GB' : lang;
+    return formatWith(d, locale, { day: 'numeric', month: 'long', year: 'numeric' }, 10, true);
 }

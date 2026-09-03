@@ -192,7 +192,7 @@ Each service is independently deployable but shares:
 2. **Middleware Stack** (`src/middleware/`):
    - `errorHandler.ts` — centralized error handling (logs to Sentry)
    - `auth.ts` — JWT/session validation, workspace scoping, CSRF protection
-   - `admin.ts` — admin-only routes
+   - `admin.ts` — admin-only routes. Includes the manual **invoice register** (`controllers/adminInvoices.ts` → `services/admin/invoices.ts`): issue / preview / download / send / void for the rails Stripe does not bill. Numbers (`JW24-YYYY-NNN`) are allocated inside the creating transaction under a per-series advisory lock so the series stays gapless, the AR/EN PDF is rendered by headless Chromium (`services/invoicePdf.ts`) and archived as bytes in `invoice_documents`, and sending delegates to the existing merchant-email path rather than reimplementing delivery. See SYSTEM_ANALYSIS.md for the full contract.
    - `workspace.ts` — multi-workspace isolation; resolves default workspace via `workspaceService.resolveDefaultWorkspaceId` when no `X-Workspace-Id` header is sent
    - `geo.ts` — geolocation via MaxMind (for compliance checks, sanctioned countries)
    - `requestId.ts` — unique request ID for tracing
