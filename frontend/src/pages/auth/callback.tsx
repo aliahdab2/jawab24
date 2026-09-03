@@ -9,12 +9,16 @@ import { AppSkeleton } from '@/components/ui';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { getLocalePath } from '@/utils/locale';
 import { resolveLoginLanguage } from '@/lib/dashboardLanguage';
+import { reportPageSyncOutcome } from '@/features/pageSync';
 
 export default function AuthCallback() {
   const router = useRouter();
   const { setAuth, setWorkspaces } = useAuthStore();
   const t = useTranslations('auth');
   const tErrors = useTranslations('errors');
+  // The reconnect leg reports refused pages with the shared reporter, whose
+  // message keys live in the `pages` namespace (loaded in getStaticProps below).
+  const tPages = useTranslations('pages');
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
 
@@ -205,7 +209,7 @@ export default function AuthCallback() {
       // Reconnect flow: sync pages with the fresh token then redirect back to pages
       if (isReconnect && data.fbAccessToken) {
         try {
-          await fetch(`${apiUrl}/pages/sync`, {
+          const syncResponse = await fetch(`${apiUrl}/pages/sync`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -214,6 +218,19 @@ export default function AuthCallback() {
             body: JSON.stringify({ accessToken: data.fbAccessToken }),
             signal: abortSignal,
           });
+
+          // A sync can succeed and still REFUSE pages (plan page limit, trial
+          // already used, held by another workspace). Those reasons ride in the
+          // body, and discarding it left the merchant with fewer pages than they
+          // granted and no explanation — the exact silence this page shipped with
+          // until 2026-09-04. The toasts persist across the client-side redirect
+          // to /pages below, so they are read there.
+          // ⚠️ No workspace-switch action here: the workspace store is not usable
+          // mid-auth, so the reporter degrades that one toast to a plain warning.
+          if (syncResponse.ok) {
+            const syncData = await syncResponse.json().catch(() => undefined);
+            reportPageSyncOutcome(syncData, { t: tPages, locale: preferredLocale });
+          }
         } catch {
           // Non-fatal — pages will still show, user can manually sync
         }
@@ -316,7 +333,7 @@ export default function AuthCallback() {
       setError(errorMessage);
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
-  }, [t, tErrors]);
+  }, [t, tErrors, tPages]);
 
   useEffect(() => {
     if (router.isReady) {

@@ -42,7 +42,8 @@ export const PAGE_NAMESPACES = {
   error500:           [],
 
   // ── Auth flow ─────────────────────────────────────────────────
-  authCallback:       ['auth'],
+  // 'pages': the reconnect leg reports refused pages via features/pageSync.
+  authCallback:       ['auth', 'pages'],
   authSync:           ['auth'],
   completeProfile:    ['profile'],
   phoneCollect:       ['auth'],
