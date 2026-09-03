@@ -34,6 +34,22 @@ export interface WebhookRegistrationResult {
      * store appears connected but no webhooks fire on new events.
      */
     exhausted?: boolean;
+    /**
+     * Topics that landed in `registered` because the platform answered
+     * "already subscribed" (a non-2xx we deliberately tolerate), with the status
+     * it used — NOT topics we actually created, which answer 2xx and are absent
+     * here.
+     *
+     * This exists because folding both outcomes into `registered` destroyed the
+     * only evidence that could distinguish them. Zid answers `400` + a max-limit
+     * body for `product.*` but has never done so for `order.*`, which either
+     * means the cap is not per-event or means those subscriptions are being
+     * re-created (duplicated) on every attempt — a merchant-visible difference
+     * (duplicate order SMS / cart nudges) that nothing recorded. A topic present
+     * in `registered` and absent here returned 2xx; present here, it already
+     * existed. Diagnostic only: nothing branches on it.
+     */
+    alreadyRegistered?: Array<{ topic: string; status: number }>;
 }
 
 /**

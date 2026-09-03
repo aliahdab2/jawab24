@@ -5,7 +5,7 @@ import {
     registerWebhooksWithPersist,
     type EcommercePlatform,
 } from '../services/ecommerce';
-import { integrationRegistry } from '../integrations/registry';
+import { integrationRegistry, toStoreForWebhooks } from '../integrations/registry';
 
 /**
  * Factory for the shared "Re-register webhooks" handler.
@@ -39,12 +39,7 @@ export function createReregisterHandler(platform: EcommercePlatform) {
         const status = await registerWebhooksWithPersist(
             store.id,
             platform,
-            () => adapter.registerWebhooks({
-                id: store.id,
-                storeDomain: store.storeDomain,
-                accessToken: store.accessToken,
-                accessTokenIv: store.accessTokenIv,
-            }),
+            () => adapter.registerWebhooks(toStoreForWebhooks(store)),
         );
         return reply.send({ ok: status.failed.length === 0, webhookStatus: status });
     };

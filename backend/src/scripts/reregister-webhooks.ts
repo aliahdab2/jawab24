@@ -34,6 +34,7 @@ import { and, eq } from 'drizzle-orm';
 import { registerWebhooksWithPersist, type EcommercePlatform } from '../services/ecommerce';
 import { isDemoStore } from '../services/demoStore';
 import { integrationRegistry } from '../integrations';
+import { toStoreForWebhooks } from '../integrations/registry';
 
 const PLATFORMS: EcommercePlatform[] = ['shopify', 'salla', 'zid'];
 
@@ -70,12 +71,7 @@ async function reregisterForPlatform(platform: EcommercePlatform): Promise<Platf
             const status = await registerWebhooksWithPersist(
                 store.id,
                 platform,
-                () => adapter.registerWebhooks({
-                    id: store.id,
-                    storeDomain: store.storeDomain,
-                    accessToken: store.accessToken,
-                    accessTokenIv: store.accessTokenIv,
-                }),
+                () => adapter.registerWebhooks(toStoreForWebhooks(store)),
             );
             const ok = status.failed.length === 0;
             console.log(`  ${ok ? '✅' : '⚠️ '} ${store.storeDomain} — registered ${status.registered.length}, failed ${status.failed.length}`);

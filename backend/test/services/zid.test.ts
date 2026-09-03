@@ -442,6 +442,123 @@ describe('Zid Service', () => {
             expect(mockCaptureError).not.toHaveBeenCalled();
         });
 
+        /** The exact duplicate envelope Zid returns (JAWAB24-BACKEND-2P, 2026-09-03). */
+        const MAX_LIMIT_BODY = {
+            status: 'error',
+            message: { type: 'error', code: null, name: null, description: 'تم تجاوز الحد الأقصى وهو 1 ' },
+        };
+
+        it('treats the 400 max-limit-exceeded body as already-registered', async () => {
+            mockFetch.mockResolvedValue(jsonResponse(MAX_LIMIT_BODY, 400));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        it('reproduces the real production shape: product.* duplicate, order/cart fresh', async () => {
+            // This — not a uniform response — is what prod has answered on every
+            // attempt for 30 days: ONLY the four product.* topics return the
+            // max-limit 400; order.* and abandoned_cart.* answer 2xx. A uniform
+            // fixture cannot see that asymmetry, which is the whole reason the
+            // per-event cap is still unproven.
+            mockFetch.mockImplementation((_url: string, init: RequestInit) => {
+                const event = JSON.parse(init.body as string).event as string;
+                return Promise.resolve(
+                    event.startsWith('product.')
+                        ? jsonResponse(MAX_LIMIT_BODY, 400)
+                        : jsonResponse({ id: 1 }, 201),
+                );
+            });
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+            // The evidence the old code destroyed: only the four product topics
+            // were tolerated as pre-existing; the rest were genuinely created.
+            expect(result.alreadyRegistered).toEqual([
+                { topic: 'product.create', status: 400 },
+                { topic: 'product.update', status: 400 },
+                { topic: 'product.publish', status: 400 },
+                { topic: 'product.delete', status: 400 },
+            ]);
+        });
+
+        it('omits alreadyRegistered entirely when every topic was freshly created', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ id: 1 }, 201));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.alreadyRegistered).toBeUndefined();
+        });
+
+        it('records the tolerated status for 409/422 too, not just the 400', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ error: 'Conflict' }, 409));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.alreadyRegistered).toHaveLength(ZID_WEBHOOK_EVENTS.length);
+            expect(result.alreadyRegistered?.[0]).toEqual({ topic: 'product.create', status: 409 });
+        });
+
+        // Zid's wording is not byte-stable, and an exact-literal match silently
+        // restores the original bug on any of these. normalizeArabic folds them.
+        it.each([
+            ['hamza-less الاقصى', 'تم تجاوز الحد الاقصى وهو 1'],
+            ['non-breaking space', 'تم تجاوز\u00A0الحد الأقصى وهو 1'],
+            ['doubled space', 'تم تجاوز  الحد الأقصى وهو 1'],
+            ['a diacritic mid-phrase', 'تم تجاوز الحَد الأقصى وهو 1'],
+        ])('tolerates the max-limit 400 spelled with %s', async (_label, description) => {
+            mockFetch.mockResolvedValue(jsonResponse({ status: 'error', message: { description } }, 400));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        it('tolerates the max-limit 400 when the body is not JSON at all', async () => {
+            mockFetch.mockResolvedValue({
+                ok: false,
+                status: 400,
+                headers: new Headers(),
+                json: async () => { throw new Error('not json'); },
+                text: async () => 'تم تجاوز الحد الأقصى وهو 1',
+            });
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        // Every one of these was swallowed by the first cut's speculative
+        // English fallback (/maximum|limit/ && /exceed/). They are real errors —
+        // the target_url one is exactly the malformed-URL case the duplicate
+        // branch must let through.
+        it.each([
+            ['unknown event', 'Invalid event name'],
+            ['rate limiting', 'Rate limit exceeded. Try again later.'],
+            ['request quota', 'You have exceeded the maximum number of requests'],
+            ['malformed target_url', 'target_url exceeded the maximum length of 255'],
+            ['payload size', 'Maximum payload size exceeded'],
+        ])('still records a 400 for %s as a failure', async (_label, description) => {
+            mockFetch.mockResolvedValue(jsonResponse({ status: 'error', message: { description } }, 400));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([]);
+            expect(result.failed).toHaveLength(ZID_WEBHOOK_EVENTS.length);
+            expect(result.failed[0]).toMatchObject({ topic: 'product.create', status: 400 });
+            expect(result.alreadyRegistered).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
         it('records non-2xx failures with status and captures the error', async () => {
             mockFetch.mockResolvedValue(jsonResponse({ error: 'boom' }, 500));
 
