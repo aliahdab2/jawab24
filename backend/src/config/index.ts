@@ -514,15 +514,13 @@ export const config = {
         userEmail: 'demo@jawab24.com',
     },
 
-    // Phone OTP Authentication (feature flag — disabled until WhatsApp/SMS provider is configured)
+    // Phone OTP Authentication (feature flag).
+    // ⛔ There is NO verification transport today: the SMS rail was retired with
+    // the Vonage provider (D-123), and WhatsApp OTP needs a Jawab24-owned WABA
+    // plus an AUTHENTICATION-category template, neither of which exists. Turning
+    // this on registers routes whose OTP request answers 503 `otp_unavailable`.
+    // Prerequisites for re-enabling: .planning/WHATSAPP_PLAN.md.
     phoneAuthEnabled: process.env.PHONE_AUTH_ENABLED === 'true',
-
-    // Vonage SMS — OTP delivery provider
-    vonage: {
-        apiKey: process.env.VONAGE_API_KEY || '',
-        apiSecret: process.env.VONAGE_API_SECRET || '',
-        senderId: process.env.VONAGE_SENDER_ID || 'Jawab24',
-    },
 
     // Resend — transactional email (lead digest, waitlist campaigns, future transactional emails)
     // RESEND_API_KEY is required in production via src/utils/env.ts validation (fail-fast at boot).

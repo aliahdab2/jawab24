@@ -1,8 +1,7 @@
 import { db } from '../db';
 import { customerNotificationTemplates, customerNotificationsLog } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { smsService } from './sms';
-import { sendWhatsAppNotification, WhatsAppNotificationError } from './whatsappNotificationSender';
+import { sendWhatsAppNotification, WhatsAppNotificationError, WA_SEND_ERRORS } from './whatsappNotificationSender';
 import { customerNotificationQueue } from '../lib/customerNotificationQueue';
 import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
@@ -67,7 +66,7 @@ export class CustomerNotificationService {
                 platformEventId,
                 customerPhone,
                 customerName,
-                channel: template.channel ?? 'sms',
+                channel: template.channel ?? 'whatsapp',
                 messageSent: rendered,
                 // The WhatsApp path needs the values SEPARATELY (to fill {{1}}, {{2}}…),
                 // and `rendered` has already flattened them into one string.
@@ -148,24 +147,27 @@ export class CustomerNotificationService {
         if (!entry || entry.status === 'cancelled') return;
 
         try {
-            // The row carries the channel the template asked for (written at
-            // schedule time). WhatsApp sends a Meta-approved template; SMS stays
-            // the default. There is deliberately NO cross-channel fallback: a
-            // WhatsApp failure is reported to the merchant, never silently
-            // re-routed to the SMS rail (which is provider-blocked today).
-            let providerMessageId: string | null = null;
-            if (entry.channel === 'whatsapp') {
-                providerMessageId = await sendWhatsAppNotification({
-                    storeId: entry.ecommerceStoreId,
-                    notificationType: entry.notificationType,
-                    customerPhone: entry.customerPhone,
-                    customerName: entry.customerName,
-                    language: this.detectLanguage(entry.customerPhone),
-                    variables: entry.variables ?? {},
-                });
-            } else {
-                await smsService.send(entry.customerPhone, entry.messageSent);
+            // WhatsApp is the ONLY customer channel (D-123): the SMS rail was
+            // retired with the Vonage provider, so a Meta-approved template is
+            // the single way a notification reaches a customer.
+            //
+            // A row asking for anything else is stale data — a job enqueued
+            // before the migration, or a hand-edited row. It fails VISIBLY with a
+            // stable reason the card can explain, rather than being quietly
+            // re-routed: sending over a channel the merchant did not choose is
+            // the silent-failure shape this service exists to avoid.
+            if (entry.channel !== 'whatsapp') {
+                throw new WhatsAppNotificationError(WA_SEND_ERRORS.channelUnsupported);
             }
+
+            const providerMessageId = await sendWhatsAppNotification({
+                storeId: entry.ecommerceStoreId,
+                notificationType: entry.notificationType,
+                customerPhone: entry.customerPhone,
+                customerName: entry.customerName,
+                language: this.detectLanguage(entry.customerPhone),
+                variables: entry.variables ?? {},
+            });
 
             await db
                 .update(customerNotificationsLog)
@@ -193,7 +195,7 @@ export class CustomerNotificationService {
             // not a defect — it must not page anyone. Everything else is reported.
             if (!isWaReason || !(error as WhatsAppNotificationError).retryable) {
                 captureError(error, 'CustomerNotification send failed', {
-                    tags: { service: 'customer-notifications', channel: entry.channel ?? 'sms' },
+                    tags: { service: 'customer-notifications', channel: entry.channel ?? 'whatsapp' },
                     extra: { notificationLogId, type: entry.notificationType },
                 });
             }
@@ -219,6 +221,12 @@ export class CustomerNotificationService {
     /**
      * Seed default templates for a newly connected store.
      * Safe to call multiple times — skips existing types.
+     *
+     * These bodies are the merchant-editable copy shown in the settings card and
+     * stored on the log row as the human-readable rendering. The message a
+     * customer actually receives comes from the canonical Meta-approved template
+     * (`whatsappNotificationTemplates.ts`), whose wording is frozen at approval
+     * time — so keep the two in step when either changes.
      */
     async seedDefaults(storeId: string): Promise<void> {
         const defaults: Array<{
@@ -284,8 +292,11 @@ export class CustomerNotificationService {
         const toInsert = defaults.filter(d => !existingTypes.has(d.notificationType));
         if (toInsert.length === 0) return;
 
+        // Channel is written explicitly rather than left to the column default:
+        // a seeded row must state the rail it will use, so a future default
+        // change cannot silently re-point stores seeded before it.
         await db.insert(customerNotificationTemplates).values(
-            toInsert.map(d => ({ ecommerceStoreId: storeId, ...d })),
+            toInsert.map(d => ({ ecommerceStoreId: storeId, channel: 'whatsapp', ...d })),
         );
     }
 

@@ -827,7 +827,7 @@ export interface EcommerceAnalyticsOverview {
   storeId: string;
   period: { from: string; to: string; range: EcommerceAnalyticsRange };
   notifications: {
-    /** Channel-keyed funnel + roll-up total. Today: only 'sms'. Future: 'whatsapp', 'dm'. */
+    /** Channel-keyed funnel + roll-up total. Today: only 'whatsapp'. Future: 'dm'. */
     funnel: { total: NotificationFunnel; byChannel: Record<string, NotificationFunnel> };
     byType: Record<string, number>;
   };

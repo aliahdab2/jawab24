@@ -18,10 +18,9 @@ import { storeGaClientIdFirstTouch } from '../services/ga4';
 import { replayPendingActivationEventsToGa4 } from '../services/activation';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
-import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
+import { otpService, OtpRateLimitError, OtpTransportUnavailableError, OtpVerifyResult } from '../services/otp';
 import { isPartnerUser } from '../services/partnerAccess';
-import { SmsCountryUnsupportedError } from '../services/sms';
-import { isValidPhone, isValidEmail, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
+import { isValidPhone, isValidEmail, isSanctionedPhone, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
 import { isDemoFacebookId } from '../utils/demo';
 
 /**
@@ -826,6 +825,25 @@ export class AuthController {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format: +966xxxxxxxx' });
         }
 
+        // Sanctioned destinations are refused before a code is minted or stored.
+        // This used to surface from inside the SMS provider; with the rail gone
+        // the check belongs here, where the destination is first known — and the
+        // client contract (`country_blocked` → the translated "use Facebook
+        // login" notice) is unchanged.
+        if (isSanctionedPhone(phone)) {
+            return reply.status(400).send({ error: 'country_blocked', message: 'Phone verification is not available for this country' });
+        }
+
+        // Refuse before minting. `storeOtp` writes an `otp_codes` row and burns
+        // the per-phone rate-limit slot, so minting a code that provably cannot
+        // be delivered would both litter the table and rate-limit a user out of
+        // a feature that never worked. `sendOtp` throws for the same reason and
+        // stays the backstop below — this only stops the useless write.
+        if (!otpService.hasTransport()) {
+            request.log.error({ phone }, 'OTP requested with no delivery transport configured');
+            return reply.status(503).send({ error: 'otp_unavailable', message: 'Phone verification is temporarily unavailable' });
+        }
+
         try {
             const code = otpService.generateCode();
             await otpService.storeOtp(phone, code);
@@ -837,8 +855,13 @@ export class AuthController {
             if (error instanceof OtpRateLimitError) {
                 return reply.status(429).send({ error: 'rate_limited', message: 'Please wait before requesting a new code' });
             }
-            if (error instanceof SmsCountryUnsupportedError) {
-                return reply.status(400).send({ error: 'country_blocked', message: 'SMS verification is not available for this country' });
+            // No transport can carry the code (the SMS rail is retired, D-123, and
+            // WhatsApp OTP needs a Jawab24-owned WABA that does not exist yet).
+            // 503, not 500: the request is well-formed and the feature is simply
+            // not available — and it must never read as «sent».
+            if (error instanceof OtpTransportUnavailableError) {
+                request.log.error({ err: error }, 'OTP requested with no delivery transport configured');
+                return reply.status(503).send({ error: 'otp_unavailable', message: 'Phone verification is temporarily unavailable' });
             }
             request.log.error({ err: error }, 'OTP request failed');
             return reply.status(500).send({ error: 'server_error', message: 'Failed to send verification code' });

@@ -32,7 +32,13 @@ vi.mock('../../src/services/whatsappAvailability', () => ({
 }));
 vi.mock('../../src/services/whatsappNotificationSender', () => ({
     resolveWhatsAppSender: vi.fn().mockResolvedValue(null),
-    ensureTemplatesProvisioned: vi.fn(),
+    // Must resolve, not return undefined: the controller fires this
+    // fire-and-forget and attaches a .catch — a bare vi.fn() would make the
+    // channel-switch path throw a TypeError that production never does.
+    ensureTemplatesProvisioned: vi.fn().mockResolvedValue(undefined),
+    // The status read resolves through this (D-123) instead of a raw SELECT, so
+    // it must resolve a real map — the controller reads its values.
+    resolveTemplateStatusesByType: vi.fn().mockResolvedValue({}),
 }));
 
 import {
@@ -172,6 +178,47 @@ describe('updateTemplate', () => {
         expect(reply.status).toHaveBeenCalledWith(404);
         expect(reply.send).toHaveBeenCalledWith({ error: 'Template not found' });
     });
+
+    // WhatsApp is the only rail (D-123). A PUT naming the retired SMS rail is
+    // refused rather than stored: accepting it would write a row whose sends can
+    // only ever fail, which is the silent-failure shape this endpoint's channel
+    // pre-flight exists to prevent.
+    it('refuses a retired sms channel without writing anything', async () => {
+        const req = makeReq(
+            { storeId: 'store-1', type: 'order_confirmed' },
+            { body: { channel: 'sms' } },
+        );
+        const reply = makeReply();
+
+        await updateTemplate(req, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(400);
+        expect(db.update).not.toHaveBeenCalled();
+        // The message must name what IS accepted — a bare "invalid" leaves an
+        // API client guessing at a value that no longer exists.
+        const sent = vi.mocked(reply.send).mock.calls[0][0] as { error: string };
+        expect(sent.error).toContain('whatsapp');
+    });
+
+    it('accepts the whatsapp channel for a WhatsApp-capable type', async () => {
+        const updated = { ...sampleTemplate, channel: 'whatsapp' };
+        vi.mocked(db.update).mockReturnValue(mockUpdateReturningChain([updated]) as never);
+        const { resolveWhatsAppSender } = await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce({
+            pageId: 'page-1', phoneNumberId: '123', wabaId: 'waba-1', accessToken: 'tok',
+        });
+
+        const req = makeReq(
+            { storeId: 'store-1', type: 'order_confirmed' },
+            { body: { channel: 'whatsapp' }, log: { error: vi.fn() } },
+        );
+        const reply = makeReply();
+
+        await updateTemplate(req, reply);
+
+        expect(reply.send).toHaveBeenCalledWith(updated);
+        expect(reply.status).not.toHaveBeenCalledWith(400);
+    });
 });
 
 // ─── resetTemplates ──────────────────────────────────────────────────────────
@@ -293,5 +340,87 @@ describe('getWhatsAppStatus — availability (D-117)', () => {
         await getWhatsAppStatus(makeReq({ storeId: 's2' }), reply);
 
         expect(reply.send).toHaveBeenCalledWith({ available: false, templates: {} });
+    });
+});
+
+// Since D-123 removed the channel picker, this endpoint is the ONLY thing that
+// can refresh a template's review state or repair a lost submission — the two
+// other paths hang off a send, and a send cannot happen while the template is
+// unapproved. These cases pin both duties.
+describe('getWhatsAppStatus — refresh and repair (D-123)', () => {
+    const sender = { pageId: 'page-1', phoneNumberId: '123', wabaId: 'waba-1', accessToken: 'tok' };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGetWaUnavailable.mockResolvedValue(null);
+        mockGetStoreById.mockResolvedValue({ id: 's3', userId: 'u3', workspaceId: 'ws-3' });
+        mockResolveOwner.mockResolvedValue('owner-3');
+    });
+
+    it('resolves statuses through the refreshing resolver, not a raw table read', async () => {
+        const { resolveWhatsAppSender, resolveTemplateStatusesByType } =
+            await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce(sender);
+        vi.mocked(resolveTemplateStatusesByType).mockResolvedValueOnce({ order_confirmed: 'approved' });
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's3' }), reply);
+
+        // Mutation: swap the resolver back for a raw db.select and this fails —
+        // which is the whole point. The stale-read defect was invisible precisely
+        // because a raw read returns plausible data.
+        expect(resolveTemplateStatusesByType).toHaveBeenCalledWith(sender);
+        expect(db.select).not.toHaveBeenCalled();
+        expect(reply.send).toHaveBeenCalledWith({ available: true, templates: { order_confirmed: 'approved' } });
+    });
+
+    it('re-kicks provisioning when a type is missing — Meta has never seen that template', async () => {
+        const { resolveWhatsAppSender, resolveTemplateStatusesByType, ensureTemplatesProvisioned } =
+            await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce(sender);
+        vi.mocked(resolveTemplateStatusesByType).mockResolvedValueOnce({
+            order_confirmed: 'approved',
+            order_shipped: 'missing',
+        });
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's3' }, { log: { error: vi.fn() } }), reply);
+
+        // Mutation: drop the `missing` re-kick and this fails. Without it a lost
+        // connect-time submission has no repair path at all now that the
+        // channel-switch re-kick is unreachable from the dashboard.
+        expect(ensureTemplatesProvisioned).toHaveBeenCalledWith(sender);
+    });
+
+    it('does NOT re-kick provisioning when every template is merely awaiting review', async () => {
+        const { resolveWhatsAppSender, resolveTemplateStatusesByType, ensureTemplatesProvisioned } =
+            await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce(sender);
+        vi.mocked(resolveTemplateStatusesByType).mockResolvedValueOnce({
+            order_confirmed: 'pending',
+            order_shipped: 'pending',
+        });
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's3' }, { log: { error: vi.fn() } }), reply);
+
+        // `pending` means Meta HAS the template and is reviewing it. Resubmitting
+        // that is not a repair, it is noise against Meta on every card open.
+        expect(ensureTemplatesProvisioned).not.toHaveBeenCalled();
+    });
+
+    it('still answers when the provisioning re-kick rejects — the read must not fail with it', async () => {
+        const { resolveWhatsAppSender, resolveTemplateStatusesByType, ensureTemplatesProvisioned } =
+            await import('../../src/services/whatsappNotificationSender');
+        vi.mocked(resolveWhatsAppSender).mockResolvedValueOnce(sender);
+        vi.mocked(resolveTemplateStatusesByType).mockResolvedValueOnce({ order_shipped: 'missing' });
+        vi.mocked(ensureTemplatesProvisioned).mockRejectedValueOnce(new Error('Meta 500'));
+        const log = { error: vi.fn() };
+        const reply = makeReply();
+
+        await getWhatsAppStatus(makeReq({ storeId: 's3' }, { log }), reply);
+
+        expect(reply.send).toHaveBeenCalledWith({ available: true, templates: { order_shipped: 'missing' } });
+        expect(log.error).toHaveBeenCalled();
     });
 });

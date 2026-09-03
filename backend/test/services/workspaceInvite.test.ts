@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { workspaceInviteService } from '../../src/services/workspaceInvite';
+import { workspaceInviteService, InvalidInviteContactError } from '../../src/services/workspaceInvite';
 import { db } from '../../src/db';
 
 vi.mock('../../src/db', () => ({
@@ -25,12 +25,6 @@ vi.mock('../../src/services/workspace', () => ({
     },
 }));
 
-vi.mock('../../src/services/sms', () => ({
-    smsService: {
-        send: vi.fn().mockResolvedValue(undefined),
-    },
-}));
-
 vi.mock('../../src/services/email', () => ({
     emailService: {
         send: vi.fn().mockResolvedValue({ success: true, id: 'email-1' }),
@@ -50,7 +44,6 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 }));
 
 const { workspaceService } = await import('../../src/services/workspace');
-const { smsService } = await import('../../src/services/sms');
 const { emailService } = await import('../../src/services/email');
 
 function mockSelectLimitChain(returnValue: any) {
@@ -127,9 +120,6 @@ describe('WorkspaceInviteService', () => {
             expect(result.rawToken).toBeDefined();
             expect(typeof result.rawToken).toBe('string');
             expect(result.rawToken.length).toBe(64); // 32 bytes hex
-            expect(result.smsSent).toBe(false);
-            expect(smsService.send).not.toHaveBeenCalled();
-            // Email invites are now sent automatically (no SMS for an email contact).
             expect(result.emailSent).toBe(true);
             expect(emailService.send).toHaveBeenCalledTimes(1);
             expect(db.insert).toHaveBeenCalledTimes(1);
@@ -164,30 +154,23 @@ describe('WorkspaceInviteService', () => {
             expect(result.emailSent).toBe(false);
         });
 
-        it('should send SMS when inviting a phone number', async () => {
-            const phoneInvite = { ...sampleInvite, email: null, phone: '+966501234567' };
+        // A phone invite has no transport since the SMS rail retired (D-123).
+        // The dashboard has rejected phone contacts since #233, but client-side
+        // ONLY — an API client could still create an invite whose link was
+        // guaranteed never to arrive. The rule is now enforced here, where it
+        // cannot be bypassed.
+        it('refuses a phone contact instead of creating an undeliverable invite', async () => {
             vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
-            vi.mocked(db.insert).mockReturnValue(mockInsertChain(phoneInvite) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(sampleInvite) as any);
 
-            const result = await workspaceInviteService.createInvite('ws-1', '+966501234567', 'member', 'user-1');
+            await expect(
+                workspaceInviteService.createInvite('ws-1', '+966501234567', 'member', 'user-1'),
+            ).rejects.toBeInstanceOf(InvalidInviteContactError);
 
-            expect(result.smsSent).toBe(true);
-            expect(smsService.send).toHaveBeenCalledTimes(1);
-            expect(vi.mocked(smsService.send).mock.calls[0][0]).toBe('+966501234567');
-            expect(vi.mocked(smsService.send).mock.calls[0][1]).toContain('Jawab24');
-        });
-
-        it('should still create invite if SMS fails', async () => {
-            const phoneInvite = { ...sampleInvite, email: null, phone: '+966501234567' };
-            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
-            vi.mocked(db.insert).mockReturnValue(mockInsertChain(phoneInvite) as any);
-            vi.mocked(smsService.send).mockRejectedValueOnce(new Error('Vonage error'));
-
-            const result = await workspaceInviteService.createInvite('ws-1', '+966501234567', 'member', 'user-1');
-
-            expect(result.invite).toEqual(phoneInvite);
-            expect(result.rawToken).toBeDefined();
-            expect(result.smsSent).toBe(false);
+            // Refused BEFORE the row is written: a pending invite nobody can
+            // receive would sit in the team panel forever.
+            expect(db.insert).not.toHaveBeenCalled();
+            expect(emailService.send).not.toHaveBeenCalled();
         });
 
         it('should update existing invite on re-invite', async () => {

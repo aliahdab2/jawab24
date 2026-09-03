@@ -43,7 +43,7 @@ async function insertLogRow(storeId: string, row: {
         ecommerceStoreId: storeId,
         notificationType: row.type,
         customerPhone: row.phone,
-        channel: 'sms',
+        channel: 'whatsapp',
         messageSent: 'test message',
         status: row.status,
         cartTotal: row.cartTotal,

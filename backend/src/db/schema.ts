@@ -162,8 +162,27 @@ export const workspaceMembers = pgTable('workspace_members', {
 export const workspaceInvites = pgTable('workspace_invites', {
     id: uuid('id').defaultRandom().primaryKey(),
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
-    email: varchar('email', { length: 255 }), // nullable — either email or phone must be set
-    phone: varchar('phone', { length: 20 }), // E.164 format (+966xxxxxxxxx)
+    /**
+     * The invite contact. Nullable for the historical rows described under
+     * `phone`; every row written since D-123 carries one, because
+     * `workspaceInviteService.createInvite` refuses a contact without it.
+     */
+    email: varchar('email', { length: 255 }),
+    /**
+     * E.164 (+966xxxxxxxxx) — ⛔ RESERVED, NO CURRENT WRITER (D-123, 2026-09-03).
+     *
+     * Phone invites were delivered by SMS; that rail is gone, so `createInvite`
+     * now rejects a phone contact and never writes this column. Kept rather than
+     * dropped because rows written before the retirement still carry it (3 in
+     * production on 2026-09-03: 2 revoked, 1 accepted, 0 pending) and it is the
+     * only record of who those invites were addressed to — dropping it would
+     * destroy that (Rule 10.11c). `idx_workspace_invites_ws_phone` is retained
+     * for the same reason: it guards nothing new, but it is what makes those rows
+     * unambiguous.
+     *
+     * A future WhatsApp invite would reuse this column, not add another.
+     */
+    phone: varchar('phone', { length: 20 }),
     tokenHash: varchar('token_hash', { length: 255 }).notNull().unique(),
     role: varchar('role', { length: 20 }).default('member'),
     status: varchar('status', { length: 20 }).default('pending'), // 'pending' | 'accepted' | 'expired' | 'revoked'
@@ -2014,7 +2033,11 @@ export const customerNotificationTemplates = pgTable('customer_notification_temp
     ecommerceStoreId: uuid('ecommerce_store_id').notNull().references(() => ecommerceStores.id, { onDelete: 'cascade' }),
     notificationType: varchar('notification_type', { length: 50 }).notNull(),
     // Types: 'abandoned_cart' | 'order_confirmed' | 'order_shipped' | 'order_delivered' | 'review_request' | 'digital_delivery'
-    channel: varchar('channel', { length: 20 }).notNull().default('sms'),
+    // 'whatsapp' is the only rail (D-123 — the SMS rail retired with Vonage).
+    // Kept as a column, not collapsed away: the log groups the analytics funnel
+    // by it, and it is the seat for a future rail (a local CST-registered SMS
+    // route, a DM follow-up) without another migration.
+    channel: varchar('channel', { length: 20 }).notNull().default('whatsapp'),
     messageAr: text('message_ar').notNull(),
     messageEn: text('message_en').notNull(),
     isEnabled: boolean('is_enabled').default(false),

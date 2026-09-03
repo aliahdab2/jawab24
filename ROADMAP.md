@@ -9,7 +9,7 @@
 
 ## 🧭 Execution Spine — next 6–8 weeks (from 2026-05-31)
 
-> **Status 2026-07-09:** the WhatsApp track of this spine is DONE ahead of the keystone — full channel shipped in #392 (Embedded Signup connect UI, multi-number, voice notes/media) + follow-ups #418/#420/#423 (read receipts, typing indicators)/#424 (sender names, channel badges), currently behind a founder canary (`WHATSAPP_ALLOWLIST`); **Meta App Review for templates submitted 2026-07-08, in review**. Salla submission still pending (assets/marketing sign-off). **The keystone (1d customer-identity map + 1e proactive sender) has NOT started** — cart-recovery/order notifications remain SMS-only. That keystone is now the whole remaining path to LetsBot parity on proactive commerce.
+> **Status 2026-07-09:** the WhatsApp track of this spine is DONE ahead of the keystone — full channel shipped in #392 (Embedded Signup connect UI, multi-number, voice notes/media) + follow-ups #418/#420/#423 (read receipts, typing indicators)/#424 (sender names, channel badges), currently behind a founder canary (`WHATSAPP_ALLOWLIST`); **Meta App Review for templates submitted 2026-07-08, in review**. Salla submission still pending (assets/marketing sign-off). **The keystone (1d customer-identity map + 1e proactive sender) has NOT started.** ⚠️ Superseded on the channel question: cart-recovery/order notifications were SMS-only when this was written; the SMS rail was removed on 2026-09-03 (D-123) and they now go out over **WhatsApp templates** — the keystone's remaining job is the DM channel, not replacing SMS. That keystone is now the whole remaining path to LetsBot parity on proactive commerce.
 
 The phases below are a *menu*; this spine is the *order*. Several tracks run in parallel; the **critical path is the keystone** — it unlocks the largest competitive gap (proactive WhatsApp/DM commerce). Week bands are **relative sequencing, not date commitments** — assign real dates to team capacity.
 
@@ -21,7 +21,7 @@ WhatsApp backend ✅ ──► Meta Embedded Signup req ──► WA Phase 3 con
                         (file NOW, 3–5d TTL)        (build in parallel, no approval needed)          │
                                                                                                      ▼
 KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-recovery + DM order notif ─► WhatsApp cart-recovery + notif
-          (no external dep — just build)                     (notif infra already shipped, SMS-only)   = LetsBot parity on outbound
+          (no external dep — just build)                     (notif infra shipped; WhatsApp rail)      = LetsBot parity on outbound
 ```
 
 ### Sequenced work
@@ -37,7 +37,7 @@ KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-rec
 
 **W3–5 — the unlock**
 - **Keystone 1e — proactive sender** (`proactiveMessaging.ts`, rate-limited): the missing "system-initiated outbound" primitive. *(Spec: Power Features Phase 1e.)*
-- Once 1d+1e land → **DM cart-recovery** (Power Features Ph2) + **DM order notifications** (Power Features Ph3) ship in parallel — the notification engine (templates, queue, scheduler, worker) already exists for SMS; this adds the DM channel branch.
+- Once 1d+1e land → **DM cart-recovery** (Power Features Ph2) + **DM order notifications** (Power Features Ph3) ship in parallel — the notification engine (templates, queue, scheduler, worker) already exists and runs on the WhatsApp rail since D-123; this adds the DM channel branch.
 
 **W5–6 — parity moment + more distribution**
 - WhatsApp Phase 4 (templates) once Meta-approved → route cart-recovery + notifications over **WhatsApp**. *This is the point Jawab24 reaches LetsBot parity on proactive commerce.*
@@ -61,7 +61,7 @@ KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-rec
 
 ### Success signals per milestone
 - **Salla live** → first non-seed merchant install + one real AI reply referencing their catalog.
-- **Keystone live** → a cart-recovery DM delivered to a mapped customer (not SMS).
+- **Keystone live** → a cart-recovery DM delivered to a mapped customer (not a WhatsApp template).
 - **WhatsApp parity** → an order-confirmation template delivered over WhatsApp end-to-end.
 
 ---
@@ -92,7 +92,7 @@ KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-rec
 - No customer profiles/CRM (inbox now shows WhatsApp customer phone numbers — a label, not a profile)
 - No AI suggested replies in inbox
 - ~~Team features: backend ready, UI not yet exposed~~ — **`/team` page + email invites shipped** (#224, polish #252/#253/#278)
-- **Proactive DM/WhatsApp cart-recovery & order notifications NOT built** — only the SMS channel is live. Unblocked by the **keystone** (customer-identity mapping + proactive sender) in the Execution Spine above; the notification engine itself is shipped, it just lacks a DM/WhatsApp channel branch.
+- **Proactive DM cart-recovery & order notifications NOT built** — the **WhatsApp template** channel is live (D-123 made it the only one; SMS was removed), the DM channel is not. Unblocked by the **keystone** (customer-identity mapping + proactive sender) in the Execution Spine above; the notification engine itself is shipped, it just lacks a DM/WhatsApp channel branch.
 
 ### Completed Since Last Update (2026-05-31 → 2026-07-09)
 - **WhatsApp channel (full)** — Embedded Signup connect, WhatsApp-only cards, multi-number, voice notes (#392); launch env wiring + runbook (#418), pre-launch security fixes (#420), read receipts + typing indicators (#423), webhook sender names + inbox channel badges (#424); inbox shows WhatsApp customer phone number w/ tap-to-copy. Meta Embedded Signup submission package (#406); **App Review submitted 2026-07-08**.
@@ -107,7 +107,7 @@ KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-rec
 - Android v1.3.14 promoted to production 100%
 
 ### Completed Since Last Update (2026-04-15 → 2026-05-30)
-- E-commerce **SMS customer notifications** live: order confirmed/shipped/delivered, abandoned-cart recovery, review requests, digital delivery — bilingual, dedup'd, merchant-configurable (`services/customerNotifications.ts`)
+- E-commerce **customer notifications** live over **WhatsApp** (D-123 — SMS removed 2026-09-03): order confirmed/shipped/delivered, abandoned-cart recovery — bilingual, dedup'd, merchant-configurable (`services/customerNotifications.ts`). ⚠️ `review_request` has no WhatsApp template and `digital_delivery` has no firing code path at all, so neither is deliverable (SYSTEM_ANALYSIS gap 15)
 - **E-commerce analytics dashboard** shipped (`services/ecommerceAnalytics.ts` + `pages/ecommerce-analytics.tsx`)
 - **Platform-agnostic webhook hardening** lifted across Shopify/Salla/Zid (retry queue, persist-on-throw, reregister endpoint + recovery UI) — PR #27/#28
 - **Salla App Store launch prep**: privacy policy now covers Shopify/Salla/Zid (#176), pending-install refresh-token persistence fixed (#211), listing brief + validation docs drafted
@@ -387,7 +387,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 | WhatsApp | ✅ | ✅ | ✅ | **✅** (shipped #392; founder canary until Meta review clears; templates pending) |
 | Web Chat | ✅ | ✅ | ✅ | ❌ |
 | Email | ✅ | ✅ | ✅ | ✅ (Transactional via Resend) |
-| SMS | ✅ | ❌ | ❌ | ❌ |
+| SMS | ✅ | ❌ | ❌ | ❌ (rail removed 2026-09-03, D-123 — deliberate: WhatsApp templates cost ~$0.011 against €0.172 for KSA SMS, and KSA denies foreign A2P SMS outright) |
 
 ### Direct Competitors (Same niche)
 

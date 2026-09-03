@@ -37,7 +37,7 @@
 - **Job Queue**: BullMQ 5.66.4 (job scheduling)
 - **AI/LLM**: OpenAI SDK 6.27.0 (pinned exact version for stability)
 - **Payments**: Stripe 14.11.0
-- **Authentication**: JWT (custom), Facebook OAuth, Phone OTP via Vonage SMS
+- **Authentication**: JWT (custom), Facebook OAuth (the only working login — phone OTP has no delivery transport, D-123)
 - **Error Tracking**: Sentry Node 10.35.0
 - **Push Notifications**: Firebase Admin SDK 13.6.1
 - **Geolocation**: CDN header-based primary (Cloudflare `CF-IPCountry`) + geoip-lite 1.4.10 as offline fallback
@@ -151,7 +151,6 @@
 - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_HOST_NAME` - Shopify OAuth
 - `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET` - Salla e-commerce
 - `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID` - Zid e-commerce
-- `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM_NUMBER` - Vonage SMS (phone OTP)
 - `PHONE_AUTH_ENABLED` - Feature flag for phone OTP login
 - `SENTRY_DSN` - Sentry error tracking
 - `AI_SERVICE_URL` - AI worker endpoint

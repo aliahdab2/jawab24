@@ -121,7 +121,7 @@ export { MARKETPLACE_BILLED_CODES, isMarketplaceBilledCode } from './marketplace
 export type { MarketplaceBilledCode } from './marketplaceBilledCodes';
 // presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
 export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
-export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, SANCTIONED_DIAL_PREFIXES, isSanctionedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
 
 // --- Markdown link/image syntax → plain text (customer channels render none of it) ---
@@ -1686,18 +1686,26 @@ export type OrderNotificationType =
   | 'review_request'
   | 'digital_delivery';
 
-/** Delivery rails for a customer notification. */
-export type NotificationChannel = 'sms' | 'whatsapp';
+/**
+ * Delivery rails for a customer notification.
+ *
+ * WhatsApp is the only one: the SMS rail was retired with the Vonage provider
+ * (D-123). Kept as a union rather than collapsed to a string, so adding a rail
+ * (a local CST-registered SMS route, a DM follow-up) is a one-line change that
+ * TypeScript then walks through every reader.
+ */
+export type NotificationChannel = 'whatsapp';
 
 /**
  * The notification types deliverable over WhatsApp — those with a canonical
- * Meta-approved template. `review_request` and `digital_delivery` stay SMS-only.
+ * Meta-approved template. `review_request` and `digital_delivery` have none, and
+ * since WhatsApp is the only rail they cannot be delivered at all.
  *
  * Shared because BOTH sides must agree: the backend refuses a channel switch for
  * a type that isn't here, and the settings card decides from the same list which
- * rows get a channel selector at all. Two hand-maintained copies would drift the
- * day a type gains a template — the card would keep hiding a toggle the backend
- * had started accepting (AI_INSTRUCTIONS Rule 10.8).
+ * rows can be switched on at all. Two hand-maintained copies would drift the day
+ * a type gains a template — the card would keep hiding a toggle the backend had
+ * started accepting (AI_INSTRUCTIONS Rule 10.8).
  */
 export const WHATSAPP_NOTIFICATION_TYPES = [
   'order_confirmed',
@@ -1740,7 +1748,7 @@ export interface NotificationTemplate {
   messageEn: string;
   isEnabled: boolean;
   delayMinutes: number;
-  /** Delivery rail: 'sms' (default) or 'whatsapp' (Meta-approved template). */
+  /** Delivery rail — 'whatsapp' (a Meta-approved template) is the only one. */
   channel: NotificationChannel;
   includeCoupon: boolean;
   couponCode: string | null;

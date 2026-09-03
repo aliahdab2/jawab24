@@ -74,6 +74,36 @@ describe('WhatsApp notification channel (real Postgres)', () => {
         vi.clearAllMocks();
     });
 
+    // WhatsApp is the only rail (D-123). Asserted against real Postgres because
+    // BOTH halves of that have to hold: the service writes the channel
+    // explicitly, and the column's own default agrees with it — a seed that
+    // relied on a stale 'sms' default would produce rows that can never send.
+    it('seeds every template on the whatsapp rail, and the column default agrees', async () => {
+        const { store } = await createStoreWithWorkspace();
+        await customerNotificationService.seedDefaults(store.id);
+
+        const seeded = await testDb
+            .select()
+            .from(schema.customerNotificationTemplates)
+            .where(eq(schema.customerNotificationTemplates.ecommerceStoreId, store.id));
+
+        expect(seeded.length).toBeGreaterThan(0);
+        expect(seeded.map(r => r.channel)).toEqual(seeded.map(() => 'whatsapp'));
+
+        // Insert without naming the channel: this reads the migration's DEFAULT,
+        // not the service's value.
+        const [defaulted] = await testDb
+            .insert(schema.customerNotificationTemplates)
+            .values({
+                ecommerceStoreId: store.id,
+                notificationType: 'default_probe',
+                messageAr: 'ar',
+                messageEn: 'en',
+            })
+            .returning();
+        expect(defaulted.channel).toBe('whatsapp');
+    });
+
     it('persists the rendered variables on the log row so a template send can rebuild its params', async () => {
         const { store } = await createStoreWithWorkspace();
         await customerNotificationService.seedDefaults(store.id);

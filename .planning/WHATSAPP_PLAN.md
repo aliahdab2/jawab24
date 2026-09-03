@@ -13,12 +13,15 @@
 
 **Why:** Vonage **SMS** OTP can't reach our core markets — Syria is sanctions-blocked, Saudi Arabia/KSA denies foreign A2P SMS, Libya is unreliable. A mandatory phone-collect step churned Syrian trial signups with a 400 `country_blocked` (Sentry `JAWAB24-FRONTEND-1R`).
 
-**Current state (shipped on `fix/phone-optional-onboarding`):** SMS OTP is **retired** and all phone UI is hidden behind `PHONE_AUTH_ENABLED` / `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (OFF). Facebook OAuth is the sole identity. Onboarding **never** asks for a phone (decoupled at the code level — `requiresPhone` removed from OAuth callbacks). Team invites are email-only. The OTP infra (`otpService`, `otp_codes`, `/auth/phone/*`) is preserved.
+**Current state (SMS rail REMOVED 2026-09-03, D-123):** there is **no verification transport at all**. `services/sms.ts` is deleted with its Vonage config; `otpService.sendOtp` throws `OtpTransportUnavailableError` and `POST /auth/phone/request` answers **503 `otp_unavailable`** — loud on purpose, because the dead rail used to answer «sent» and deliver nothing. All phone UI stays hidden behind `PHONE_AUTH_ENABLED` / `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (OFF), Facebook OAuth is the sole identity, onboarding never asks for a phone, and team invites are email-only **enforced server-side**. The transport-agnostic OTP infra (`otpService` generate/store/verify, `otp_codes`) is preserved for exactly this migration.
 
-**To re-enable phone OTP via WhatsApp (this is the tracked path for the `// TEMP` block in `backend/src/services/sms.ts`):**
-1. Add a WhatsApp Cloud API authentication-template sender and swap it in at the single seam `otpService.sendOtp()` → `smsService.send()` (or route by region).
-2. Flip `PHONE_AUTH_ENABLED=true` for deliverable regions. The login phone tab, phone-collect page, and (optionally) team phone invites re-appear automatically.
-3. **Syria (`+963`) stays permanently exempt** — WhatsApp Business Platform is *also* sanctions-blocked for Syria, so it can never receive OTP. The exemption list is `SMS_BLOCKED_DIAL_PREFIXES` / `isSmsBlockedPhone` in `@jawab24/shared`; `PhoneInput` already disables submit + shows a notice for blocked prefixes.
+**Prerequisites for phone OTP over WhatsApp — the first two are OPS, not code, and they are the actual blockers:**
+1. **A Jawab24-owned WABA + phone number + system-user token**, and new config keys for them. Nothing exists today: every WhatsApp send in the codebase uses a *merchant's* number (`pages.whatsapp_*`), and a login code goes to someone who has connected nothing. ⚠️ Register the WABA **in the market it serves** — Meta bills a higher *authentication-international* rate when the account's country differs from the recipient's (Saudi Arabia adjusted 2026-04-01).
+2. **An approved AUTHENTICATION-category template per language.** `whatsappService.createMessageTemplate` hardcodes `category: 'UTILITY'`, and `sendTemplateMessage` emits a `body` component only — an auth template needs its OTP button / copy-code component.
+3. Then the code: swap the single seam `otpService.sendOtp()` (or route by region), and flip `PHONE_AUTH_ENABLED=true`. The login phone tab and phone-collect page re-appear on their own.
+4. **Syria (`+963`) stays permanently exempt whatever the transport** — Meta bars it too (D-045), so no channel can ever carry a code there. The list is `SANCTIONED_DIAL_PREFIXES` / `isSanctionedPhone` in `@jawab24/shared`, checked in `requestOtp` before a code is minted; `PhoneInput` disables submit and explains it.
+
+⚠️ **Not currently worth building** (assessed 2026-09-03): all 101 users signed in with Facebook, every connect flow already requires a Meta login, and marketplace merchants get "Sign in with Zid" (D-115). Revisit only on evidence of signups dropping at the Facebook step. NIST SP 800-63B-4 also makes SMS/PSTN codes a *restricted* authenticator, so the retired rail should not come back as the answer either.
 
 This makes the "WhatsApp-only merchant → Phone OTP" row in the Merchant Types table below the trigger for re-enabling phone auth.
 

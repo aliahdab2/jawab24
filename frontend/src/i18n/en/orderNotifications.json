@@ -1,6 +1,6 @@
 {
   "title": "Order Notifications",
-  "desc": "Send automated SMS messages to customers at key moments in their order journey",
+  "desc": "Send automated WhatsApp messages to customers at key moments in their order journey",
   "sent": "Sent",
   "failed": "Failed",
   "total": "Total",
@@ -39,9 +39,8 @@
     "review_request": "Ask customers to leave a review after delivery",
     "digital_delivery": "Send download instructions for digital products"
   },
-  "channelLabel": "Delivery channel",
+  "channelLabel": "Delivery",
   "channels": {
-    "sms": "SMS",
     "whatsapp": "WhatsApp"
   },
   "templateStatus": {
@@ -49,7 +48,8 @@
     "rejected": "Meta rejected the template",
     "missing": "Not submitted for approval yet"
   },
-  "connectWhatsAppHint": "Link a WhatsApp number to this store to enable WhatsApp delivery.",
-  "whatsappTemplateNote": "WhatsApp uses a Meta-approved template, so its wording cannot be edited here. The text above still applies to SMS.",
-  "noDeliveryRail": "Not available yet — this type has no WhatsApp template, and SMS delivery is currently unavailable."
+  "connectWhatsAppHint": "Link a WhatsApp number to this store to start sending.",
+  "whatsappTemplateNote": "Delivered as a Meta-approved WhatsApp template whose wording is fixed at approval time. Editing the text above does NOT change what your customer receives — it is kept only as this notification's record.",
+  "noDeliveryRail": "Not available yet — this type has no approved WhatsApp template.",
+  "whatsappUnavailableZid": "WhatsApp cannot be connected for stores linked through Zid at the moment, so these notifications cannot be sent yet."
 }

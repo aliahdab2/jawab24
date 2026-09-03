@@ -220,7 +220,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
                     required: ['phone'],
                     properties: {
                         phone: { type: 'string', description: 'E.164 format: +966xxxxxxxx' },
-                        locale: { type: 'string', enum: ['en', 'ar'], description: 'SMS language' },
+                        locale: { type: 'string', enum: ['en', 'ar'], description: 'Language of the verification message' },
                     },
                     additionalProperties: false,
                 },
