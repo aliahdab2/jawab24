@@ -549,6 +549,39 @@ describe('AuthManager', () => {
       expect(mockAxios.retry).not.toHaveBeenCalled();
     });
 
+    /**
+     * ⛔ The backend returns ADMIN_REQUIRED for a RESTRICTED embedded session
+     * even when the account IS a Jawab24 admin — both `middleware/auth.ts` and
+     * `middleware/admin.ts` refuse on `embeddedPlatform` before they ever look
+     * at `is_admin`. So inside a platform frame this 403 says nothing about the
+     * account, while the write it would trigger is profile-wide: `auth-storage`
+     * is one localStorage key shared by every tab, so it would strip the flag
+     * from the merchant's ordinary web tabs too.
+     *
+     * Uses the real `embeddedSession` module rather than a mock — the marker it
+     * reads is the actual thing production reads.
+     */
+    it('leaves the admin flag alone on ADMIN_REQUIRED inside a platform frame', async () => {
+      const { useAuthStore } = await import('../lib/store');
+      vi.mocked(useAuthStore.getState).mockReturnValue({
+        user: { id: 'u-1', isAdmin: true },
+        updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+      } as unknown as ReturnType<typeof useAuthStore.getState>);
+      window.sessionStorage.setItem('jawab24:embedded:platform', 'zid');
+
+      try {
+        const mockAxios = createMockAxios();
+        authManager.setupAuthInterceptor(mockAxios.instance);
+
+        const error = axiosErrorWith(403, { url: '/admin/customers' }, { code: 'ADMIN_REQUIRED' });
+
+        await expect(mockAxios.response.onRejected(error)).rejects.toBe(error);
+        expect(mockUpdateUser).not.toHaveBeenCalled();
+      } finally {
+        window.sessionStorage.removeItem('jawab24:embedded:platform');
+      }
+    });
+
     it('should reject errors without response object', async () => {
       const mockAxios = createMockAxios();
       authManager.setupAuthInterceptor(mockAxios.instance);

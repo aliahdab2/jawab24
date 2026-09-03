@@ -4,6 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Shield, Users, ArrowLeft, FlaskConical, Bell, BarChart3, DollarSign, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
+import { useSessionSync } from '@/hooks/useSessionSync';
 import { useTranslations, useLocale } from 'next-intl';
 import clsx from 'clsx';
 import { isRTLLocale } from '@/utils/locale';
@@ -40,6 +41,13 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // The admin area does NOT render inside DashboardLayout, which was the only
+    // caller — so the identity check never ran on the very screen the cross-tab
+    // defect was reported on (D-123), leaving recovery there to the
+    // ADMIN_REQUIRED net alone. It reconciles `isAdmin` too, which is what the
+    // redirect below gates on.
+    useSessionSync(_hasHydrated && isAuthenticated);
 
     // Redirect non-admins to dashboard
     useEffect(() => {

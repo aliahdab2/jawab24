@@ -161,7 +161,11 @@ class AuthManager {
         activeWorkspaceId: null,
       });
     } catch (e) {
-      captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-clear-local' } });
+      // Tag deliberately unchanged from when this block lived inside logout():
+      // it is the established signal for "dropping local auth state failed",
+      // and saved Sentry searches and alerts are keyed on it. The failure is
+      // the same one whichever caller reached it.
+      captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-logout' } });
     }
 
     clearSentryUser();
@@ -345,6 +349,18 @@ class AuthManager {
         // being revoked mid-session, which nothing else would notice until the
         // next page mount.
         if (status === 403 && errorCode === 'ADMIN_REQUIRED') {
+          // ⛔ Only outside a platform frame. The backend returns this SAME code
+          // for a restricted embedded session even when the account IS a
+          // Jawab24 admin — both `middleware/auth.ts` and `middleware/admin.ts`
+          // refuse on `embeddedPlatform` before they ever look at `is_admin`.
+          // So in a frame this 403 says nothing about the account, while the
+          // write it would trigger is profile-wide: `auth-storage` is one
+          // localStorage key shared by every tab, so it would strip the flag
+          // from the merchant's ordinary web tabs too.
+          if (isEmbeddedSession()) {
+            addErrorBreadcrumb('auth', 'ADMIN_REQUIRED in an embedded session — admin flag left alone');
+            return Promise.reject(error);
+          }
           const { useAuthStore } = await import('./store');
           if (useAuthStore.getState().user?.isAdmin) {
             useAuthStore.getState().updateUser({ isAdmin: false });
