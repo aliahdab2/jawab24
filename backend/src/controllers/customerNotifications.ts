@@ -1,16 +1,12 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
-import { customerNotificationTemplates, customerNotificationsLog, whatsappNotificationTemplates } from '../db/schema';
+import { customerNotificationTemplates, customerNotificationsLog } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { customerNotificationService } from '../services/customerNotifications';
-import { ensureTemplatesProvisioned, resolveWhatsAppSender } from '../services/whatsappNotificationSender';
+import { ensureTemplatesProvisioned, resolveTemplateStatusesByType, resolveWhatsAppSender } from '../services/whatsappNotificationSender';
 import { getStoreById, resolveBillingSubjectUserId } from '../services/ecommerce';
 import { getWhatsAppUnavailableReason } from '../services/whatsappAvailability';
-import {
-    canonicalTemplateFor,
-    isWhatsAppNotificationType,
-    WHATSAPP_NOTIFICATION_TYPES,
-} from '../services/whatsappNotificationTemplates';
+import { isWhatsAppNotificationType } from '../services/whatsappNotificationTemplates';
 
 /** GET /api/notification-templates/:storeId */
 export async function getTemplates(request: FastifyRequest, reply: FastifyReply) {
@@ -29,9 +25,24 @@ const VALID_NOTIFICATION_TYPES = new Set([
     'abandoned_cart', 'order_confirmed', 'order_shipped',
     'order_delivered', 'review_request', 'digital_delivery',
 ]);
-const MAX_MESSAGE_LENGTH = 1600; // 10 SMS segments
-/** Delivery rails a merchant may pick per notification type. */
-const VALID_CHANNELS = new Set(['sms', 'whatsapp']);
+/**
+ * Cap on the merchant-authored body. 1600 was «10 SMS segments» and outlived the
+ * rail that made it mean anything (D-123); it is kept because it still bounds
+ * what a merchant can store and no shorter number is defensible either — the
+ * text is no longer what a customer receives (that is the frozen Meta template),
+ * so it is not the WhatsApp template-body limit of 1024 that applies here. It is
+ * a storage/abuse bound on a free-text column, nothing more.
+ */
+const MAX_MESSAGE_LENGTH = 1600;
+/**
+ * Delivery rails a merchant may pick per notification type.
+ *
+ * WhatsApp is the only one: the SMS rail was retired with the Vonage provider
+ * (D-123). The set is kept rather than inlined because `channel` remains the
+ * seat for any future rail, and a PUT naming a retired one must be refused with
+ * a message that lists what IS accepted.
+ */
+const VALID_CHANNELS = new Set(['whatsapp']);
 
 /** PUT /api/notification-templates/:storeId/:type */
 export async function updateTemplate(request: FastifyRequest, reply: FastifyReply) {
@@ -90,10 +101,12 @@ export async function updateTemplate(request: FastifyRequest, reply: FastifyRepl
                 });
             }
             // Belt-and-braces: templates are provisioned AT CONNECT TIME
-            // (pagesService.kickOffNotificationTemplates), so by the time a
-            // merchant flips this switch Meta's review is normally already done.
-            // This re-kick (idempotent, single-flighted) covers numbers connected
-            // before that existed and any submission the connect-time run lost.
+            // (pagesService.kickOffNotificationTemplates), so Meta's review is
+            // normally already done before anyone touches this. ⚠️ Since D-123
+            // retired the picker, the dashboard no longer sends `channel` at all
+            // — only an API client reaches this branch, so this re-kick can no
+            // longer be the safety net for a lost connect-time submission.
+            // `getWhatsAppStatus` carries that duty now (see its note).
             ensureTemplatesProvisioned(sender).catch(err => {
                 request.log.error({ err, storeId }, '[WANotif] template provisioning failed after channel switch');
             });
@@ -134,9 +147,21 @@ export async function resetTemplates(request: FastifyRequest, reply: FastifyRepl
  * GET /api/notification-templates/:storeId/whatsapp-status
  *
  * Whether this store can send over WhatsApp at all, and where Meta's review of
- * the canonical templates stands. The card uses it to decide between the channel
- * toggle, a "connect WhatsApp" nudge, and a "waiting for approval" chip — so the
- * merchant is never left guessing why a notification did not go out.
+ * the canonical templates stands. Since WhatsApp is the only rail (D-123), this
+ * IS the card's delivery-state report — the "connect WhatsApp" nudge, the Zid
+ * case, and the template-review chip all come from here, so the merchant is
+ * never left guessing why a notification did not go out.
+ *
+ * ⛔ This endpoint must both REFRESH and, where needed, REPAIR — a read that
+ * only reports is not enough here. Retiring the channel picker (D-123) removed
+ * the merchant's only way to trigger either: the picker's re-kick of
+ * `ensureTemplatesProvisioned` was the belt-and-braces for a lost connect-time
+ * submission, and a raw SELECT here reported a status nothing re-polled. Both
+ * refreshers hung off a send, and a send cannot happen while the template is
+ * unapproved — so a store whose provisioning was lost sat at «waiting for
+ * approval» forever with no action available to anyone. Measured 2026-09-03: 8
+ * production rows, all `pending`, `last_checked_at == last_submitted_at`,
+ * untouched for five days.
  */
 export async function getWhatsAppStatus(request: FastifyRequest, reply: FastifyReply) {
     const { storeId } = request.params as { storeId: string };
@@ -154,27 +179,27 @@ export async function getWhatsAppStatus(request: FastifyRequest, reply: FastifyR
     const sender = await resolveWhatsAppSender(storeId);
     if (!sender) return reply.send({ available: false, templates: {} });
 
-    const rows = await db
-        .select({
-            templateName: whatsappNotificationTemplates.templateName,
-            language: whatsappNotificationTemplates.language,
-            status: whatsappNotificationTemplates.status,
-        })
-        .from(whatsappNotificationTemplates)
-        .where(eq(whatsappNotificationTemplates.pageId, sender.pageId));
+    // Goes through the SAME resolver the send path uses, so the chip cannot say
+    // something a send would contradict — and so opening the card re-polls Meta
+    // once our record has gone stale.
+    const templates = await resolveTemplateStatusesByType(sender);
 
-    // Collapse the per-language rows into one status per notification type: a type
-    // is usable only when BOTH language variants are approved (we pick the language
-    // from the customer's phone at send time, so a half-approved pair is not ready).
-    const templates: Record<string, string> = {};
-    for (const type of WHATSAPP_NOTIFICATION_TYPES) {
-        const statuses = (['ar', 'en'] as const).map(lang =>
-            rows.find(r => r.templateName === canonicalTemplateFor(type, lang).name && r.language === lang)?.status ?? 'missing',
-        );
-        templates[type] = statuses.includes('rejected') ? 'rejected'
-            : statuses.every(s => s === 'approved') ? 'approved'
-                : statuses.includes('missing') ? 'missing'
-                    : 'pending';
+    // A template Meta has never seen is a provisioning failure, not a waiting
+    // state, and only a resubmission clears it. `pending` is deliberately NOT
+    // included: Meta HAS that template and is reviewing it, so resubmitting is
+    // noise, not repair.
+    //
+    // Fire-and-forget, and never throws. Repeat cost is bounded, though not by
+    // one mechanism: concurrent opens share a single run (`inFlightProvisioning`),
+    // and from the SECOND read onward the row exists — a submission that failed
+    // leaves `status='unknown'` with `lastSubmittedAt` stamped, which puts it
+    // behind `UNKNOWN_RESUBMIT_BACKOFF_MS` (30 min). The FIRST read for a truly
+    // absent template does submit unconditionally; that is the point of it.
+    // The merchant sees the repair on their next load.
+    if (Object.values(templates).some(status => status === 'missing')) {
+        ensureTemplatesProvisioned(sender).catch(err => {
+            request.log.error({ err, storeId }, '[WANotif] template provisioning failed from status read');
+        });
     }
 
     return reply.send({ available: true, templates });

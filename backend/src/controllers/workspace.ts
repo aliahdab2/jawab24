@@ -1,6 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { workspaceService, WorkspaceAccessDeniedError } from '../services/workspace';
-import { workspaceInviteService } from '../services/workspaceInvite';
+import { workspaceInviteService, InvalidInviteContactError } from '../services/workspaceInvite';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { ROLE_HIERARCHY } from '../utils/roles';
@@ -163,23 +163,29 @@ async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
         if (!(request as ResolvedWorkspaceRequest).workspaceId || !request.user) {
             return reply.status(400).send({ error: true, message: 'Workspace not resolved' });
         }
-        // Accept `contact` (email or phone). Fall back to `email` for backwards compatibility.
+        // Accept `contact`; fall back to `email` for backwards compatibility.
         const body = request.body as { contact?: string; email?: string; role?: WorkspaceRole };
         const contact = (body.contact ?? body.email ?? '').trim();
 
         if (!contact) {
-            return reply.status(400).send({ error: true, message: 'Email or phone number is required' });
+            return reply.status(400).send({ error: true, message: 'Email address is required' });
         }
 
-        const { invite, rawToken, smsSent, emailSent } = await workspaceInviteService.createInvite(
+        const { invite, rawToken, emailSent } = await workspaceInviteService.createInvite(
             (request as ResolvedWorkspaceRequest).workspaceId,
             contact.toLowerCase(),
             body.role || 'member',
             request.user.userId,
         );
 
-        return reply.status(201).send({ invite, token: rawToken, smsSent, emailSent });
+        return reply.status(201).send({ invite, token: rawToken, emailSent });
     } catch (error) {
+        // A phone contact is a client mistake, not a server fault — the invite
+        // has no transport (D-123). 400 with a code the UI already translates,
+        // and no Sentry noise for an input the dashboard itself rejects.
+        if (error instanceof InvalidInviteContactError) {
+            return reply.status(400).send({ error: true, code: 'email_required', message: 'Team invites require an email address' });
+        }
         captureError(error, 'Failed to create invite', { tags: { context: 'workspace' } });
         return reply.status(500).send({ error: true, message: 'Failed to create invite' });
     }

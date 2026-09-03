@@ -5,8 +5,8 @@ import {
   isValidPhone,
   isArabicPhone,
   normalizeArabicIndic,
-  isSmsBlockedPhone,
-  SMS_BLOCKED_DIAL_PREFIXES,
+  isSanctionedPhone,
+  SANCTIONED_DIAL_PREFIXES,
   isValidHttpUrl,
 } from '../validation';
 
@@ -173,19 +173,19 @@ describe('isValidPhone', () => {
   });
 });
 
-describe('isSmsBlockedPhone', () => {
+describe('isSanctionedPhone', () => {
   it('blocks Syrian (+963) numbers — provider/sanctions cannot deliver', () => {
-    expect(isSmsBlockedPhone('+963935924472')).toBe(true);
+    expect(isSanctionedPhone('+963935924472')).toBe(true);
   });
 
   it('allows deliverable regions (KSA, Egypt, UAE)', () => {
-    expect(isSmsBlockedPhone('+966555123456')).toBe(false);
-    expect(isSmsBlockedPhone('+201001234567')).toBe(false);
-    expect(isSmsBlockedPhone('+971501234567')).toBe(false);
+    expect(isSanctionedPhone('+966555123456')).toBe(false);
+    expect(isSanctionedPhone('+201001234567')).toBe(false);
+    expect(isSanctionedPhone('+971501234567')).toBe(false);
   });
 
   it('lists Syria in the canonical blocklist', () => {
-    expect(SMS_BLOCKED_DIAL_PREFIXES).toContain('+963');
+    expect(SANCTIONED_DIAL_PREFIXES).toContain('+963');
   });
 });
 

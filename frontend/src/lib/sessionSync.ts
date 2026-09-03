@@ -57,7 +57,7 @@ function clearReloadMarker(): void {
  * Called from BOTH protected layouts through `useSessionSync` —
  * `DashboardLayout` and `AdminLayout`, which do not nest. The admin area needs
  * it in its own right: it is the screen the cross-tab defect was reported on
- * (D-123), and with only the dashboard calling this, the identity check never
+ * (D-124), and with only the dashboard calling this, the identity check never
  * ran there at all.
  *
  * ⛔ NO PLATFORM BRANCH, deliberately. Job 1 alone is web-shaped (native carries

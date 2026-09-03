@@ -1,8 +1,9 @@
 /**
- * The channel selector's type list must match the backend's, without importing it.
+ * The card's deliverable-type list must match the backend's, without importing it.
  *
- * `OrderNotificationsCard` decides which notification rows get a delivery-channel
- * selector from a LOCAL `WHATSAPP_CAPABLE_TYPES` array. That array is a deliberate
+ * `OrderNotificationsCard` decides which notification rows can be switched on,
+ * and which show WhatsApp delivery state, from a LOCAL `WHATSAPP_CAPABLE_TYPES`
+ * array (WhatsApp is the only rail — D-123). That array is a deliberate
  * duplicate of `WHATSAPP_NOTIFICATION_TYPES` in `@jawab24/shared`: the card is
  * reached from the public /integrations page, `@jawab24/shared` is CommonJS and
  * therefore untree-shakeable, and one value import from it would land 66.1 kB gzip
@@ -11,7 +12,7 @@
  * So the two lists cannot be unified — but they must not drift. Importing the
  * shared list HERE is free, because a test never ships to a browser. If someone
  * gives `review_request` a WhatsApp template and updates only the backend, this
- * fails instead of the card quietly hiding a toggle the API has started accepting.
+ * fails instead of the card quietly disabling a type the API has started accepting.
  *
  * Parsed from source rather than imported, because importing the component pulls
  * React, next-intl and the API client into a test that only needs one array.
@@ -46,6 +47,18 @@ describe('OrderNotificationsCard WHATSAPP_CAPABLE_TYPES', () => {
       .toEqual([...WHATSAPP_NOTIFICATION_TYPES].sort());
   });
 
+  /**
+   * WhatsApp is the only rail (D-123), so the card must not offer a choice.
+   * A channel picker here would let a merchant select a rail the backend
+   * refuses with a 400 — and the retired one is exactly what the dead SMS
+   * option used to be: a switch that silently produced `failed` rows.
+   */
+  it('offers no channel picker — no sms option, and no channel field in the draft', () => {
+    const source = fs.readFileSync(CARD, 'utf8');
+    expect(source).not.toMatch(/'sms'/);
+    expect(source).not.toMatch(/onFieldChange\((?:[^)]*),\s*'channel'/);
+  });
+
   // The reason the duplicate exists at all. If shared ever ships an ESM build with
   // `sideEffects: false`, this stops being necessary — delete both the local array
   // and this file then, not before.
@@ -57,10 +70,10 @@ describe('OrderNotificationsCard WHATSAPP_CAPABLE_TYPES', () => {
 /**
  * The undeliverable types must not be switchable ON.
  *
- * SMS is dead fleet-wide and `review_request` / `digital_delivery` have no Meta
- * template, so enabling either produced nothing but `failed` log rows — silently,
- * because the merchant has no reason to suspect it. The toggle is therefore
- * disabled for them, with an explanation shown on the row.
+ * WhatsApp is the only rail (D-123) and `review_request` / `digital_delivery`
+ * have no Meta template, so enabling either produced nothing but `failed` log
+ * rows — silently, because the merchant has no reason to suspect it. The toggle
+ * is therefore disabled for them, with an explanation shown on the row.
  *
  * ⚠️ But ONLY in the ON direction: a type already enabled stays switchable off, or
  * a merchant who turned it on earlier would be stuck with a setting they can see

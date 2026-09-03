@@ -73,7 +73,7 @@ surprise.
 | P-5 | ai-worker running — the KB-enrichment reply and agent-tool cases need it. Default port **3002** (`ai-worker/src/config.ts`); if you run it on 3005 per the worktree convention, you MUST also set `AI_SERVICE_URL=http://localhost:3005` on the backend or every reply dies `AiWorkerUnreachable` | `curl http://localhost:3002/health` (or 3005 + matching `AI_SERVICE_URL`) | ☐ |
 | P-6 | ngrok tunnel to the backend; inspector open at `127.0.0.1:4040` | `https://<ngrok>/health` OK | ☐ |
 | P-7 | At least one Facebook test page connected with a valid token (for §C/§D live DMs) | Pages list shows it | ☐ |
-| P-8 | Test phone number that can receive real SMS (the order loop sends real messages) | — | ☐ |
+| P-8 | Test phone number reachable on **WhatsApp** (the order loop sends real messages; the SMS rail was removed — D-123) | — | ☐ |
 | P-9 | Dev-store catalog seeded per §B-0 | Zid admin → Products | ☐ |
 | P-10 | Partner Dashboard lifecycle webhook points at the tunnel for the session: `app.market.application.uninstall` → `https://<ngrok>/zid/webhooks?e=app.market.application.uninstall` (today it points at prod jawab24.com) | Dashboard → app → Webhooks | ☐ |
 
@@ -269,7 +269,17 @@ confirmed**. From the live API, resolve:
 
 ---
 
-## E. Order Webhook Loop → SMS (captures C5–C8) — the round-trip that closes D-020
+## E. Order Webhook Loop → customer notification (captures C5–C8) — the round-trip that closes D-020
+
+> ⛔ **The «SMS arrives» clause in every step below is VOID (D-123, 2026-09-03).** The SMS
+> rail and its Vonage provider were removed; WhatsApp is the only delivery channel. The
+> narration and results in this section are a DATED RECORD of runs made while SMS was the
+> rail — left intact on purpose, since rewriting them would destroy the evidence of what
+> those runs actually proved. What changed is the **still-open** half: an SMS arrival can
+> never be produced now, so wherever a step says "still open: SMS arrival", read
+> **"still open: a Meta-approved WhatsApp template delivering to the test number"**. That
+> is blocked on template approval, not on Zid — as of 2026-09-03 all 8 production
+> templates are still `pending` Meta review.
 
 ### E-1. `order.create` → order_confirmed SMS — ✅ **PASSED 2026-08-23** (webhook half)
 
@@ -301,8 +311,9 @@ order for the first time**: confirmed 14:29:57Z → shipped 14:32:55Z (~48s) →
 does not log raw bodies, so header casing and the `data`/`order`/root envelope shape are
 still unobserved. What the written row proves: Basic-auth verification passed, the phone
 parsed from `customer.mobile` full-intl-without-`+` → `+966500000009` as designed, and
-`invoice_number` resolved. **Still open on E-1:** SMS *arrival* (blocked on Vonage
-ticket #3002710, not on Zid — all 6 rows read `Vonage delivery error: Quota Exceeded`).
+`invoice_number` resolved. **Still open on E-1:** message *arrival* — no longer reachable over SMS (rail removed,
+D-123; the 6 rows then read `Vonage delivery error: Quota Exceeded`, ticket #3002710).
+Re-run over WhatsApp once the canonical template is approved.
 
 ### E-2. Status → in-delivery → order_shipped SMS — ✅ **PASSED 2026-08-23** (webhook half)
 **Steps:** Flip the order to in-delivery in the Zid admin. No carrier config needed —
@@ -339,7 +350,7 @@ to Zid.
    number the merchant and the customer both see is `id` = `invoice_number` = 72524870.
 2. The tracking field paths above were invented and never matched Zid.
 
-**Still open on E-2:** an end-to-end SMS *arrival* (blocked on Vonage, not on Zid), and
+**Still open on E-2:** an end-to-end *arrival* (now over WhatsApp — the SMS rail is gone, D-123), and
 a carrier-backed order that actually carries a tracking number.
 
 ### E-3. Status → delivered → order_delivered SMS — ✅ **PASSED 2026-08-23** (webhook half)
@@ -353,7 +364,7 @@ does NOT mean the code is `completed`). ✅ The `review_request` companion corre
 **not** fire — it is disabled on this store, so `also` was skipped rather than scheduled.
 Two rows, two distinct dedupe keys, no cross-talk between the shipped and delivered paths.
 
-**Still open on E-3:** SMS arrival (Vonage), and a `review_request` run with the template
+**Still open on E-3:** arrival (now over WhatsApp — the SMS rail is gone, D-123; note `review_request` has no WhatsApp template, so it has no rail at all), and a `review_request` run with the template
 enabled.
 
 ### E-4. Payment field — ✅ **RESOLVED 2026-08-23**
@@ -570,7 +581,7 @@ rapid-fire consecutive messages.
 **Steps:** Replay the captured `order.create` delivery 10× within ~5s (curl, verbatim
 headers+body), interleaved with 2 distinct real orders.
 
-**Expected:** Exactly 1 notification row + 1 SMS per DISTINCT order; replays all 200
+**Expected:** Exactly 1 notification row + 1 message per DISTINCT order; replays all 200
 (or Zid's semantics — capture) but produce zero duplicate side effects.
 
 ### I-3. Endpoint-down window (Zid's redelivery policy — UNKNOWN, capture it)

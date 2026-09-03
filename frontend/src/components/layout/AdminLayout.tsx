@@ -44,7 +44,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
 
     // The admin area does NOT render inside DashboardLayout, which was the only
     // caller — so the identity check never ran on the very screen the cross-tab
-    // defect was reported on (D-123), leaving recovery there to the
+    // defect was reported on (D-124), leaving recovery there to the
     // ADMIN_REQUIRED net alone. It reconciles `isAdmin` too, which is what the
     // redirect below gates on.
     useSessionSync(_hasHydrated && isAuthenticated);

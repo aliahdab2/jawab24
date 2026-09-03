@@ -45,7 +45,12 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
             if (errorCode === 'country_blocked') {
                 // Expected business outcome (sanctions-blocked region), not an error —
                 // do NOT report to Sentry (it was inflating JAWAB24-FRONTEND-1R).
-                setError(t('smsUnsupportedCountry'));
+                setError(t('phoneVerificationUnavailableRegion'));
+            } else if (errorCode === 'otp_unavailable') {
+                // No verification transport is configured at all (D-123 — the SMS
+                // rail is retired and WhatsApp OTP needs a Jawab24-owned WABA).
+                // A platform capability gap, not a fault to page anyone about.
+                setError(t('phoneVerificationUnavailable'));
             } else if (errorCode === 'invalid_phone') {
                 setError(t('invalidPhone'));
             } else if (axiosErr.response?.status === 429) {

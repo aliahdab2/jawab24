@@ -4144,7 +4144,74 @@ than load-bearing, and the code says so). jsdom does no bidi
 layout, so the unit tests can only pin *which* tokens get isolated; the visual outcome was verified
 by rendering the real `renderReplyForChannel` output in Chrome.
 
-## D-123 · A tab whose session cookie has changed hands drops LOCAL state only — the identity check is `/auth/me`'s `id`, and revoking the server session is forbidden (2026-09-03)
+## D-123 · The SMS rail is removed, not merely disabled — WhatsApp is the only customer-notification channel, and phone-OTP login has no transport (2026-09-03)
+
+**Decided:** 2026-09-03 · **Status:** Active
+
+**Context.** The owner dropped the Vonage/SMS path on 2026-08-25 (KSA SMS €0.172/message against
+~$0.011 for a WhatsApp utility template, on an account Vonage had never verified — ticket #3002710
+auto-closed, every send rejected «Quota Exceeded»). The WhatsApp notification channel shipped the
+next day (#957) and #960 disabled the two types with no template. What remained was a dead rail
+that still looked live and still owned the DEFAULT: `customer_notification_templates.channel`
+defaulted to `'sms'`, `send()` fell through to `smsService.send`, phone invites still had a live
+server-side SMS branch the UI merely hid, and `otpService.sendOtp` posted to a provider that could
+not deliver.
+
+**Measured first, from production, read-only (2026-09-03).** 12 template rows, **every one on the
+SMS channel and every one disabled**; `customer_notifications_log` **empty** (0 rows, so the
+feature had never delivered a single message); `otp_codes` **empty in its entire history**; 7 of
+101 users carry a phone, all of whom also have Facebook. So removal changes no observable
+behaviour today — it removes a dead default before a merchant can switch a type on and hit it.
+
+**Ruling.**
+1. **`services/sms.ts` and all `VONAGE_*` config are deleted.** No npm dependency went with it (it
+   was a ~30-line `fetch` to `rest.nexmo.com`). If SMS is ever wanted again it is a NEW integration
+   against a local CST-registered Saudi route (~€0.016/message), not a revival of this one.
+2. **WhatsApp is the only customer channel.** `channel` defaults to `'whatsapp'`, the 12 existing
+   rows are backfilled, `seedDefaults` writes it explicitly, and the API accepts `whatsapp` alone.
+   The column and its per-type field SURVIVE deliberately: the analytics funnel groups by it and it
+   is the seat for a future rail without another migration. A log row naming the retired rail fails
+   with the stable reason `channel_unsupported` — never silently re-routed, never marked sent.
+3. **The notifications card no longer offers a channel choice.** It reports delivery state instead:
+   the linked WhatsApp number, Meta's template review status, and the Zid-unavailable case (D-117).
+4. **Phone-OTP login is ❌ NOT IMPLEMENTED, and says so loudly.** `sendOtp` throws
+   `OtpTransportUnavailableError`; the route answers **503 `otp_unavailable`**. The
+   transport-agnostic half (generate / store / verify, `otp_codes`) is KEPT because a WhatsApp OTP
+   would reuse it. The sanctions check moved into `requestOtp`, where it now runs before a code is
+   minted rather than surfacing from inside the provider.
+5. **Team invites are email-only, enforced on the server.** A phone contact is refused with 400
+   `email_required` before any row is written. The dashboard had rejected them since #233, but
+   client-side only — an API client could still create an invite whose link could never arrive.
+
+**Why removal rather than leaving it inert.** A transport that accepts a send and delivers nothing
+is the silent-failure shape this repo forbids (Rule 14): the SMS rail returned success when its
+keys were unset, so a never-sent message read as delivered. Keeping it "in case SMS comes back"
+preserved that hazard for a rail nobody could switch on.
+
+**Not in scope, and stated as open.** WhatsApp OTP and WhatsApp team invites are blocked on OPS,
+not code: they need a **Jawab24-owned WABA** (none exists — every WhatsApp send uses a merchant's
+own number) and an **AUTHENTICATION-category template** (`createMessageTemplate` submits UTILITY
+only). Prerequisites are listed in `.planning/WHATSAPP_PLAN.md`. Templates for `review_request` /
+`digital_delivery`, lifting D-117, and Shopify `checkouts/create` are likewise untouched.
+
+**A WhatsApp login from a Jawab24 number was considered and declined for now.** All 101 users sign
+in with Facebook; every connect flow (Facebook page, Instagram, WhatsApp Embedded Signup) already
+requires a Meta login, so a merchant without one would reach an empty dashboard; marketplace
+merchants get "Sign in with Zid" (D-115). Industry check, same day: NIST SP 800-63B-4 classes
+SMS/PSTN codes as a *restricted* authenticator, ManyChat offers social login only (no email, no
+phone), and neither Salla nor Zid uses WhatsApp OTP for merchant dashboards. Revisit only on
+evidence of signups dropping at the Facebook step.
+
+**Evidence.** Guards are mutation-checked one at a time, each turning a named test red: the
+send-path channel guard (`customerNotifications.test.ts`), the OTP transport throw (3 cases in
+`otp.test.ts`), the invite refusal (`workspaceInvite.test.ts`), the controller channel whitelist
+(`controllers/customerNotifications.test.ts`), and the seeded channel against real Postgres
+(`test/integration/whatsappNotificationChannel.test.ts`, which also asserts the migration's own
+column DEFAULT — verified directly in the test database as `'whatsapp'`). Suites proven green:
+backend 8076 unit + 651 integration, frontend 3207, shared 793; lint, `tsc` on both workspaces,
+translations and the duplication gate all clean.
+
+## D-124 · A tab whose session cookie has changed hands drops LOCAL state only — the identity check is `/auth/me`'s `id`, and revoking the server session is forbidden (2026-09-03)
 
 **Ruling.** `syncSessionState` compares the `id` in the `/auth/me` response against the persisted
 `user.id` on every authenticated page mount — from BOTH protected layouts (`DashboardLayout` and
@@ -4243,3 +4310,4 @@ document load* — leaves the mounted React tree holding the departed user in co
 *Make `/auth/me` mirror the access token's `isAdmin`* so promotion becomes safe — it makes the store
 honest about the session but hides an area the database says the user owns, and it is a backend
 contract change in service of a client bug.
+

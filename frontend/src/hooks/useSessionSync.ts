@@ -9,7 +9,7 @@ import { syncSessionState } from '@/lib/sessionSync';
  * other: `DashboardLayout` wraps the merchant app, `AdminLayout` wraps the
  * admin area on its own. Copying the effect into each is how the two drift —
  * and the admin area having no call at all is precisely why the identity check
- * did not run on the screen the cross-tab defect was reported on (D-123).
+ * did not run on the screen the cross-tab defect was reported on (D-124).
  *
  * @param enabled the layout's own readiness — hydrated AND authenticated.
  *   Passed in rather than read from the store here, because each layout

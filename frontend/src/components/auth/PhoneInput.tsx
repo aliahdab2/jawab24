@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
 import type { CountryCode } from 'libphonenumber-js';
 import { useTranslations } from 'next-intl';
-import { isSmsBlockedPhone } from '@jawab24/shared';
+import { isSanctionedPhone } from '@jawab24/shared';
 
 // Display names live in i18n (auth.countries.<code>) — never hardcode them here.
 const COUNTRY_OPTIONS = [
@@ -41,7 +41,7 @@ const getDefaultCountry = (): CountryCode => {
         // Never auto-default into a region the OTP provider can't deliver to
         // (e.g. Syria) — that funnels the user straight into a guaranteed failure.
         const option = COUNTRY_OPTIONS.find(c => c.code === candidate);
-        if (option && isSmsBlockedPhone(option.dial)) return 'SA';
+        if (option && isSanctionedPhone(option.dial)) return 'SA';
         return candidate;
     } catch {
         return 'SA';
@@ -99,7 +99,7 @@ export function PhoneInput({
             // A well-formed number in a provider-blocked region (Syria) is reported
             // invalid so the parent disables submit — we never fire a request the
             // backend is guaranteed to reject with country_blocked.
-            return { e164, valid: !isSmsBlockedPhone(e164) };
+            return { e164, valid: !isSanctionedPhone(e164) };
         }
         return { e164: withDial, valid: false };
     };
@@ -191,9 +191,9 @@ export function PhoneInput({
                 />
             </div>
 
-            {isSmsBlockedPhone(selectedCountry.dial) && (
+            {isSanctionedPhone(selectedCountry.dial) && (
                 <p className="mt-1.5 text-xs text-muted-foreground" role="status">
-                    {t('smsUnsupportedCountry')}
+                    {t('phoneVerificationUnavailableRegion')}
                 </p>
             )}
 

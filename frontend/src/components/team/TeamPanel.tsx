@@ -157,33 +157,30 @@ export function TeamPanel() {
   };
 
   const processInviteResponse = (
-    res: { data?: { token?: string; smsSent?: boolean; emailSent?: boolean } },
+    res: { data?: { token?: string; emailSent?: boolean } },
     contactValue: string,
     isResend: boolean,
   ) => {
     const token = res.data?.token;
-    const smsSent = res.data?.smsSent;
     const emailSent = res.data?.emailSent;
-    const delivered = smsSent || emailSent;
-    // The invite is delivered automatically by email (or SMS). The copy-link
-    // is the manual fallback — show it only when no channel actually
-    // delivered (e.g. email provider down), and clear any stale link when a
-    // resend does go out via a channel.
-    if (token && !delivered) {
+    // The invite is delivered automatically by email. The copy-link is the
+    // manual fallback — show it only when the email did not actually go out
+    // (e.g. provider down), and clear any stale link when a resend does.
+    if (token && !emailSent) {
       showInviteLink(token, contactValue);
-    } else if (delivered) {
+    } else if (emailSent) {
       setInviteLink(null);
     }
     const key = isResend
-      ? (smsSent ? 'inviteResentSms' : emailSent ? 'inviteResentEmail' : 'inviteResent')
-      : (smsSent ? 'inviteSentSms' : emailSent ? 'inviteSentEmail' : 'inviteSent');
+      ? (emailSent ? 'inviteResentEmail' : 'inviteResent')
+      : (emailSent ? 'inviteSentEmail' : 'inviteSent');
     toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
   };
 
   const handleInvite = async () => {
     const trimmed = contact.trim().toLowerCase();
-    // Email-only invites: SMS can't reach our markets (Syria/KSA/Libya), so phone
-    // invites are retired until a WhatsApp-based flow replaces them.
+    // Email-only invites, and the backend enforces the same rule (D-123): a
+    // phone invite had no transport once the SMS rail was retired.
     if (!trimmed || !isValidEmail(trimmed)) {
       toast.error(t('invalidContact'));
       return;
@@ -211,7 +208,9 @@ export function TeamPanel() {
   };
 
   const handleResend = async (invite: InviteRow) => {
-    const contactValue = (invite.phone ?? invite.email ?? '').toLowerCase();
+    // Email only — the Resend button is not rendered for a legacy phone invite,
+    // because the server refuses a phone contact outright (D-123).
+    const contactValue = (invite.email ?? '').toLowerCase();
     setResendingId(invite.id);
     try {
       const res = await workspaceApi.createInvite(contactValue);
@@ -477,6 +476,11 @@ export function TeamPanel() {
           {invites.map((invite) => {
             const hours = hoursUntil(invite.expiresAt);
             const isExpired = hours <= 0;
+            // A phone contact only appears on invites created before the SMS
+            // rail was retired (D-123). Still rendered — the row is real and the
+            // number is who it was addressed to — but it cannot be resent: the
+            // server refuses a phone contact with 400 `email_required`, so
+            // offering the button would only produce an opaque failure.
             const displayContact = invite.phone ?? invite.email ?? '';
             const isPhone = !!invite.phone;
             const ContactIcon = isPhone ? Phone : Mail;
@@ -495,7 +499,10 @@ export function TeamPanel() {
                     <p className="text-xs text-muted-foreground">
                       {isExpired ? t('expired') : t('expiresIn', { hours })}
                     </p>
-                    {isAdmin && (
+                    {isAdmin && isPhone && (
+                      <p className="text-xs text-muted-foreground">{t('inviteResendUnavailablePhone')}</p>
+                    )}
+                    {isAdmin && !isPhone && (
                       <button
                         onClick={() => handleResend(invite)}
                         disabled={resendingId === invite.id}

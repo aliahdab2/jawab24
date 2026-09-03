@@ -22,7 +22,7 @@ Confirm before you start. If any item is ❌, fix that first; the rest of the pl
 | P-4 | ngrok tunnel active to backend | `https://<ngrok>.ngrok-free.dev/health` returns OK | ☐ |
 | P-5 | Frontend running on `localhost:3001` | Browser opens dashboard, can log in | ☐ |
 | P-6 | At least one Facebook test page connected with valid token | Pages page lists at least one entry | ☐ |
-| P-7 | Test phone number with SMS receive capability | Required for cart-recovery / order-confirmation tests | ☐ |
+| P-7 | Test phone number reachable on **WhatsApp** (the SMS rail was removed — D-123) | Required for cart-recovery / order-confirmation tests | ☐ |
 | P-8 | Test Shopify store has ≥ 5 products with images | Shopify admin → Products | ☐ |
 | P-9 | A `.env` `SHOPIFY_API_KEY` matches `Jawab24-Dev` (not prod) | Check value vs Partners app | ☐ |
 
@@ -218,9 +218,16 @@ For each test, send the listed message as a real DM to the linked FB test page a
 
 ---
 
-## E. Order Webhooks → SMS Notifications
+## E. Order Webhooks → Customer Notifications
 
-> Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `sent` (the enum is pending/sent/failed/cancelled — there is no `delivered` status) and an actual SMS lands.
+> ⛔ **«an actual SMS lands» is VOID throughout this section (D-123, 2026-09-03).** The SMS
+> rail and its Vonage provider were removed; WhatsApp is the only channel, and delivery
+> needs a Meta-approved template for the type (all 8 production templates were still
+> `pending` review on 2026-09-03). Read every "SMS arrives" expectation as "the WhatsApp
+> template message arrives". What these steps actually verify — that a webhook produces
+> the right `customer_notifications_log` row — is unchanged.
+
+> Requires P-7 (test phone number reachable on WhatsApp). All these check that `customer_notifications_log` rows are created with status `sent` (the enum is pending/sent/failed/cancelled — there is no `delivered` status) and the message actually lands.
 
 > ### ⭐ E-2/E-3 do not depend on E-1 — any EXISTING order will do
 >
@@ -247,7 +254,7 @@ For each test, send the listed message as a real DM to the linked FB test page a
 > ⚠️ **Ingestion and SMS delivery fail independently.** On Zid the rows landed correctly and
 > then failed to send with `Vonage delivery error: Quota Exceeded - rejected` — an account
 > problem, not an integration one. A `failed` row still proves the webhook, mapping and
-> dedup behaviour; only the "SMS arrives" clause is blocked.
+> dedup behaviour; only the arrival clause is blocked.
 
 ### E-1. New order → order_confirmed SMS
 **Steps:** Place a test order on the dev store with the test phone number.

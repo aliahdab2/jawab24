@@ -634,7 +634,7 @@ the non-obvious one:
    its next reload. Only if the reload does not settle it is **local state
    only** dropped, via `authManager.clearLocalSession` — never `/auth/logout`,
    which would revoke the session the merchant is actively using in the tab they
-   just signed in on (D-123) — followed by a full page load to a
+   just signed in on (D-124) — followed by a full page load to a
    `signedOutPath()` resolved BEFORE the clear, because the clear removes the
    embedded-platform marker that path depends on (D-A).
 3. *What have the server-resolved flags become?* `isPartner` (the `partners`
@@ -644,7 +644,7 @@ the non-obvious one:
    unconditional write would rewrite localStorage on every page mount. `isAdmin`
    moves in ONE direction here, revocation only: the admin-route gate reads the
    flag cached in the access token, so promoting from the database would render
-   the admin shell against a session the gate still refuses (D-123).
+   the admin shell against a session the gate still refuses (D-124).
 
 As a net for (2) and (3), a `403 ADMIN_REQUIRED` from any endpoint clears the
 stale `isAdmin` in the interceptor, which is what makes `AdminLayout` redirect

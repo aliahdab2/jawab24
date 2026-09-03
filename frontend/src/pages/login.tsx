@@ -42,11 +42,9 @@ import { DemoLoginButton } from '@/features/demo';
 import { PhoneInput } from '@/components/auth/PhoneInput';
 import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
 
-// E.164 prefixes that Twilio cannot deliver SMS to (errorCode 15).
-// Extend here if Twilio's blocklist changes.
 import { useOtpRequest } from '@/hooks/useOtpRequest';
 import { PHONE_AUTH_ENABLED } from '@/lib/featureFlags';
-import { isSmsBlockedPhone } from '@jawab24/shared';
+import { isSanctionedPhone } from '@jawab24/shared';
 
 type AuthTab = 'facebook' | 'phone';
 type OtpStep = 'phone' | 'code';
@@ -92,13 +90,12 @@ export default function LoginPage() {
     onSuccess: () => { setOtpStep('code'); setOtpCode(''); startExpiryTimer(5 * 60); },
   });
 
-  // TEMP: remove when WhatsApp OTP ships. Vonage rejects SMS to Syria with
-  // errorCode 15 (non-whitelisted destination), so block submit and direct the
-  // user to Facebook login instead of a silent failure.
-  // Twilio errorCode 15 (non-whitelisted destination) blocks SMS to certain
-  // countries. Direct affected users to Facebook login instead of a silent
-  // failure. PhoneInput already emits E.164, so a prefix check is exact.
-  const smsBlocked = useMemo(() => isSmsBlockedPhone(phoneE164), [phoneE164]);
+  // Sanctioned destinations (Syria) can never receive a verification code, on
+  // any transport — Meta bars WhatsApp there too (D-045). Block submit and point
+  // the user at Facebook login rather than let them wait for nothing. The
+  // backend refuses the same numbers; `PhoneInput` emits E.164, so a prefix
+  // check is exact. This outlives the retired SMS rail (D-123).
+  const destinationBlocked = useMemo(() => isSanctionedPhone(phoneE164), [phoneE164]);
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {
     // onComplete passes the code directly; button click falls back to state
@@ -637,14 +634,14 @@ export default function LoginPage() {
                                 {otpRequestError}
                               </p>
                             )}
-                            {smsBlocked && !otpRequestError && (
+                            {destinationBlocked && !otpRequestError && (
                               <p className="text-sm text-amber-600 dark:text-amber-400 text-center" role="alert">
-                                {t('smsUnsupportedCountry')}
+                                {t('phoneVerificationUnavailableRegion')}
                               </p>
                             )}
                             <Button
                               onClick={handleRequestOtp}
-                              disabled={otpRequestLoading || smsBlocked}
+                              disabled={otpRequestLoading || destinationBlocked}
                               size="lg"
                               className="w-full py-3 sm:py-8 max-lg:landscape:py-2.5 rounded-2xl font-bold text-lg lg:text-xl max-lg:landscape:text-base transition-all hover:scale-[1.02] active:scale-95"
                             >

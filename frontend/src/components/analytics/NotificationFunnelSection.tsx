@@ -6,7 +6,7 @@ import type { EcommerceAnalyticsOverview } from '@/lib/api';
 /**
  * Card showing the notification delivery funnel (delivered / failed / pending).
  * Reads channel keys from `funnel.byChannel` and surfaces them as a hint when
- * more than one channel is in play (today: SMS only; future: SMS + WhatsApp + DM).
+ * more than one channel is in play (today: WhatsApp only — D-123; future: + DM).
  */
 export function NotificationFunnelSection({
     funnel,

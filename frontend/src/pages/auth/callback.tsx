@@ -249,9 +249,9 @@ export default function AuthCallback() {
       }
 
       // Phone collection is intentionally NOT forced during onboarding. Phone/OTP
-      // verification (Vonage SMS today, WhatsApp Cloud API next) can't deliver to
-      // sanctions-blocked regions like Syria, so making it mandatory walled out
-      // whole segments. Phone remains an optional, opt-in feature — never a gate.
+      // verification has no transport at all today (D-123), and even once it does
+      // it can never reach sanctions-blocked regions like Syria — so making it
+      // mandatory walled out whole segments. Phone stays optional, never a gate.
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
