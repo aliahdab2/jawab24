@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type ReactElement, type ReactNode } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -20,11 +21,12 @@ import { useAuthStore } from '@/lib/store';
 import { useIOSPaymentRedirect } from '@/hooks/useIOSPaymentRedirect';
 import { useSelectPlan } from '@/hooks/useSelectPlan';
 import { useLocalPaymentRail } from '@/hooks/useLocalPaymentRail';
-import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, ChevronDown, Activity } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { isWhatsAppMarketableFor } from '@/lib/whatsappAvailability';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
+import { UPTIME_STATS } from '@/data/uptime';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
@@ -615,16 +617,31 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           <h1 className="text-2xl sm:text-5xl font-display font-bold text-foreground leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          {/* Social proof — desktop/tablet only, saves vertical space on mobile */}
+          {/* Trust line — desktop/tablet only, saves vertical space on mobile.
+              ⛔ This slot used to show five gold stars, "4.8/5" and
+              "50+ businesses". There is NO review corpus behind that rating:
+              socialProofReviews was a CUSTOMER count, and the Play listing
+              publishes no star rating at all (it sits under Google's display
+              threshold — the listing shows only "100+ downloads", checked
+              2026-09-03). _document.tsx had already dropped aggregateRating
+              from the SoftwareApplication schema for exactly this reason, which
+              left the visible page asserting what our own markup deliberately
+              refused to assert. Replaced with the one availability figure a
+              reader can check on a third-party status page we cannot edit.
+              Re-add a rating ONLY when it is sourced from a real review corpus
+              that is also displayed — and put it back in the schema at the same
+              time, or the two disagree again. */}
           <div className="hidden sm:flex items-center justify-center gap-2 mt-3">
-            <div className="flex" aria-hidden="true">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
-              ))}
-            </div>
-            <span className="text-sm font-bold text-foreground/70">{t('pricing.socialProofRating')}</span>
-            <span className="text-subtle" aria-hidden="true">·</span>
-            <span className="text-sm text-muted-foreground">{t('pricing.socialProofReviews')}</span>
+            <Activity className="w-4 h-4 text-brand-400" aria-hidden="true" />
+            <Link
+              href="/trust"
+              className="text-sm text-muted-foreground hover:text-brand-400 transition-colors"
+            >
+              {t('pricing.trustUptime', {
+                percent: UPTIME_STATS.percent,
+                days: UPTIME_STATS.windowDays,
+              })}
+            </Link>
           </div>
         </div>
 

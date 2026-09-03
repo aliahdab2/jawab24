@@ -43,6 +43,7 @@ const STATIC_PAGES = [
   { path: '/help', label: 'Help Center', lastmod: '2026-07-01' },
   { path: '/what-is-jawab24', label: 'What is Jawab24', lastmod: '2026-03-08' },
   { path: '/trust', label: 'Trust & Reliability', lastmod: '2026-08-19' },
+  { path: '/security', label: 'Security & Data Protection', lastmod: '2026-09-03' },
   { path: '/instagram', label: 'Instagram integration', lastmod: '2026-08-16' },
   { path: '/no-store', label: 'No-store segment page', lastmod: '2026-08-31' },
   { path: '/whatsapp', label: 'WhatsApp channel page', lastmod: '2026-08-31' },

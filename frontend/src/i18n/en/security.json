@@ -1,0 +1,53 @@
+{
+  "seoTitle": "Security & Data Protection — Jawab24",
+  "seoDescription": "How Jawab24 protects your data: OAuth-only access with no password storage, AES-256-GCM encryption for stored credentials, HMAC-verified webhooks, EU hosting, and every sub-processor named. Each claim states its own scope.",
+
+  "backToHome": "Back to home",
+  "title": "Security & Data Protection",
+  "intro": "This page states what Jawab24 does to protect your data — and the limit of each statement. Where a protection covers part of our systems rather than all of them, it is written that way here instead of being rounded up.",
+
+  "scopeHeading": "What we deliberately do not claim",
+  "scopeBody": "We do not claim that everything we store is encrypted at rest. What is encrypted at rest is the credential set: the access tokens for the Facebook, Instagram, WhatsApp and store accounts you connect, held under AES-256-GCM. Conversation content is held on access-controlled servers we operate, without a second layer of application-level encryption. The broader claim would be easier to write and impossible for you to check.",
+
+  "accessHeading": "Access and authentication",
+  "accessItem1": "You never type a Facebook, Instagram or WhatsApp password on our site. Connecting runs through Meta's own OAuth 2.0 flow, on Meta's domain, and your password never reaches us.",
+  "accessItem2": "We request a limited set of permissions, each tied to a feature you can see. From your own account we receive your name, email address and profile picture — that is what creates your Jawab24 account, and the Privacy Policy lists it. Posting to your personal profile, reading your friends list, and access to your ads account are not among the permissions we ask for.",
+  "accessItem3": "You can revoke our access at any moment from Facebook's Business Integrations settings, without asking us and without notice.",
+
+  "encryptionHeading": "Encryption",
+  "encryptionItem1": "In transit: TLS 1.2 and 1.3 only, with HTTP Strict Transport Security. Plain HTTP is redirected to HTTPS.",
+  "encryptionItem2": "At rest: access tokens and store credentials are encrypted with AES-256-GCM, and decrypted only at the moment of an outbound API call.",
+  "encryptionItem3": "Card numbers never reach us at all. Stripe receives payment details directly and processes them under its own terms.",
+
+  "integrityHeading": "Message integrity",
+  "integrityBody": "Every webhook we receive is authenticated before the event is processed — but the four platforms do not all offer the same proof, so this is stated per platform rather than rounded up. Meta, Shopify and Salla sign each delivery: we recompute the signature as HMAC-SHA256, compare it in constant time, and reject anything that does not match.",
+  "integrityZid": "Zid does not sign its deliveries at all. Per-store events are authenticated instead with an HTTP Basic credential we set when we subscribe, checked on every delivery and rejected on failure. Zid's App Market lifecycle notifications carry no credential of any kind, so we treat them as untrusted triggers: nothing in the body is read as fact — we re-read the state from Zid's own API before acting on it, and each store's trigger is rate-limited.",
+
+  "hostingHeading": "Hosting and residency",
+  "hostingItem1": "Your data is held on dedicated servers we operate inside the European Union, leased from Hetzner Online GmbH in Germany. The hosting provider is named here and in the Privacy Policy rather than left as \"a cloud provider\" — it is the one sub-processor that holds everything.",
+  "hostingItem2": "For merchants in Saudi Arabia, data processed under the Personal Data Protection Law is transferred to those EU servers under the safeguards set out in the Privacy Policy.",
+
+  "subprocessorsHeading": "Who else receives your data",
+  "subprocessorsBody": "Every third party that receives any part of your data is named in the Privacy Policy, together with what it receives and why. There is no unnamed \"trusted partners\" category:",
+  "subprocessorsList": "OpenAI, Meta, Stripe, Sentry, Resend, Google, Shopify, Salla, Zid, Hetzner",
+  "subprocessorsNote": "We never send an advertising or analytics provider the content of your messages, comments, customer conversations, or Business Info.",
+
+  "deletionHeading": "Deletion and retention",
+  "deletionItem1": "When you request deletion, we remove your personal data from our active systems within 30 days.",
+  "deletionItem2": "Residual copies inside encrypted backups are purged on the normal backup-rotation cycle, within 90 days.",
+
+  "monitoringHeading": "Monitoring",
+  "monitoringItem1": "Availability is measured by UptimeRobot, an independent third party, and published with its measurement window rather than as a bare number.",
+  "monitoringItem2": "Application errors are captured in Sentry so faults are found before they are reported.",
+
+  "reportHeading": "Reporting a security issue",
+  "reportBody": "If you believe you have found a vulnerability, write to us with enough detail to reproduce it. We will confirm receipt and tell you what we find.",
+
+  "verifyHeading": "Check these statements yourself",
+  "verifyBody": "None of the above should be taken on our word. Each of these documents states one part of it, and the status page is not ours to edit:",
+  "linkTrust": "Uptime, measured independently",
+  "linkPrivacy": "Privacy Policy — every sub-processor, named",
+  "linkDataDeletion": "Delete your data",
+  "linkBlog": "What happens to your data, explained in full",
+  "linkContact": "Ask us a question"
+}

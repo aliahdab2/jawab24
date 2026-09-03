@@ -27,6 +27,7 @@ const PUBLIC_PAGES = [
   { path: '/en/no-store', arPath: '/no-store' },
   { path: '/en/whatsapp', arPath: '/whatsapp' },
   { path: '/en/trust', arPath: '/trust' },
+  { path: '/en/security', arPath: '/security' },
   // TODO: add /en/contact and /en/blog when those pages are built
 ];
 
@@ -47,6 +48,7 @@ const PAGES_WITH_JSON_LD = [
   '/en/no-store',
   '/en/whatsapp',
   '/en/trust',
+  '/en/security',
   // TODO: add /en/blog when the blog is built
 ];
 
@@ -113,6 +115,8 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     { path: '/blog', expected: `${SITE_URL}/blog` },
     { path: '/en/trust', expected: `${SITE_URL}/en/trust` },
     { path: '/trust', expected: `${SITE_URL}/trust` },
+    { path: '/en/security', expected: `${SITE_URL}/en/security` },
+    { path: '/security', expected: `${SITE_URL}/security` },
     { path: '/en/no-store', expected: `${SITE_URL}/en/no-store` },
     { path: '/no-store', expected: `${SITE_URL}/no-store` },
     { path: '/en/whatsapp', expected: `${SITE_URL}/en/whatsapp` },

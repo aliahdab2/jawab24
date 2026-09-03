@@ -42,9 +42,22 @@ export const BRAND_ASSETS = {
         // rendering of the English line.
         ar: 'ردود تلقائية ذكية لواتساب وفيسبوك وإنستغرام',
     },
+    /** The one published contact address. Referenced by the Organization
+        contactPoint in _document.tsx AND by /security's vulnerability-report
+        section — two hardcoded literals is how those two silently drift. */
+    contact: {
+        support: 'support@jawab24.com',
+    },
     urls: {
         base: SITE_URL,
         canonical: (path: string = '') => `${SITE_URL}${path}`,
+        /** Canonical URL of a public page in one locale. Arabic is the default
+            and carries no prefix; English lives under /en. Every public page
+            needs this for its JSON-LD `url`, so the prefix scheme is decided
+            here once rather than copied into each page (Rule 10.8 — the clone
+            it replaces was a single line, under check:duplication's floor). */
+        canonicalForLocale: (locale: string, path: string) =>
+            `${SITE_URL}${locale === 'en' ? `/en${path}` : path}`,
         ogImage: (image: string = '/brand/og-social.png') => `${SITE_URL}${image}`,
     },
     social: {

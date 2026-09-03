@@ -145,6 +145,39 @@ export default function MyDocument({ locale }: DocProps) {
                 BRAND_ASSETS.stores.googlePlay
               ],
               "foundingDate": "2024",
+              // Legal identity, copied VERBATIM from the operator block on
+              // /terms (§13) and /privacy — the two must never disagree, because
+              // a name or address that differs between our own pages is exactly
+              // what makes an external checker distrust both. Jawab24 trades as
+              // a Swedish sole trader (Enskild Näringsverksamhet), so the legal
+              // name IS the person's name and the registered address is the one
+              // filed with Bolagsverket.
+              // ⛔ The org. nr (a Swedish personnummer for a sole trader) is
+              // published on /terms because the law requires it there, and is
+              // deliberately NOT mirrored here: JSON-LD is ingested and repeated
+              // verbatim by assistants and scrapers, and amplifying a personal
+              // identity number into machine-readable markup is a different act
+              // from meeting a disclosure duty on one page. Add it only on an
+              // explicit decision by the owner.
+              // ⛔ The SAME reasoning, applied consistently, is why `streetAddress`
+              // stops at the building and drops the apartment designator that
+              // /terms carries. This is a sole trader's home; a personnummer is
+              // semi-public in Sweden, an apartment is a physical location, and
+              // schema.org/address is optional — it earns no knowledge-panel
+              // benefit that would pay for the precision. Dropping `address`
+              // altogether remains open and is likewise the owner's call.
+              "legalName": "Mohammad Ali Ahdab",
+              "founder": {
+                "@type": "Person",
+                "name": "Mohammad Ali Ahdab"
+              },
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "Bergavägen 15 A",
+                "postalCode": "241 39",
+                "addressLocality": "Eslöv",
+                "addressCountry": "SE"
+              },
               "numberOfEmployees": {
                 "@type": "QuantitativeValue",
                 "minValue": 1,
@@ -153,7 +186,7 @@ export default function MyDocument({ locale }: DocProps) {
               "contactPoint": {
                 "@type": "ContactPoint",
                 "contactType": "customer support",
-                "email": "support@jawab24.com",
+                "email": BRAND_ASSETS.contact.support,
                 "url": "https://jawab24.com/contact",
                 "availableLanguage": ["Arabic", "English"]
               }

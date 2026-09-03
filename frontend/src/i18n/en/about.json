@@ -96,7 +96,7 @@
     "title": "Security & Privacy",
     "text": "Jawab24 takes security seriously:",
     "feature1": "OAuth 2.0 authentication through Facebook — we never store your Facebook password",
-    "feature2": "All data encrypted in transit (HTTPS) and at rest",
+    "feature2": "Encrypted in transit over HTTPS, and the access tokens for your connected accounts are encrypted at rest with AES-256-GCM",
     "feature3": "GDPR-compliant data handling with full data deletion support",
     "feature4": "Sentry error tracking for reliability monitoring"
   },

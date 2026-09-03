@@ -1,6 +1,6 @@
 ---
 seoTitle: "Is Your Data Safe with Jawab24? Security & Privacy, Explained"
-seoDescription: "How Jawab24 protects your page and your customers' data: official Facebook login with no password sharing, encryption at rest and in transit, limited revocable permissions, and full data deletion on request."
+seoDescription: "How Jawab24 protects your page and your customers' data: official Facebook login with no password sharing, TLS in transit and AES-256-GCM on the access tokens we store, limited revocable permissions, and full data deletion on request."
 seoKeywords: "Jawab24 security, is Jawab24 safe, Facebook page data protection, auto reply security, customer data privacy, connect Facebook page safely, WhatsApp Business security, connect WhatsApp safely, Facebook app permissions, data deletion, GDPR auto reply"
 title: "Is Your Data Safe with Jawab24? Here's Exactly What Happens to It"
 excerpt: "Connecting your page or WhatsApp number to any third-party tool is a decision worth scrutinizing. This article explains transparently how Jawab24 accesses your channels, which permissions it requests and why, and how we protect your conversations and your customers' data."
@@ -44,7 +44,7 @@ You can revoke Jawab24's access entirely at any moment — from Facebook's setti
 ## How We Protect Data Technically
 
 - **Encryption in transit:** every connection between your browser and our servers, and between our servers and Meta, runs over encrypted channels (HTTPS/TLS).
-- **Encryption at rest:** access keys for pages and WhatsApp accounts — the most sensitive thing we hold — are stored encrypted with AES-256, unreadable even inside the database itself.
+- **Encryption at rest:** access keys for pages and WhatsApp accounts — the most sensitive thing we hold — are stored encrypted with AES-256-GCM, unreadable even inside the database itself.
 - **Every incoming notification is verified:** each event Meta sends us — whether from Facebook, Instagram, or WhatsApp — carries a digital signature we validate before processing, so no third party can impersonate Meta and inject fake data.
 - **Account isolation:** every Jawab24 account sees only its own data. Your pages, conversations, and Business Info are fully isolated from other accounts.
 
@@ -101,6 +101,6 @@ On the [privacy policy page](/en/privacy) and the [terms page](/en/terms).
 
 ## Bottom Line: Trust Is Built with Transparency
 
-We know connecting your page to a third-party tool takes trust, and trust isn't requested — it's demonstrated: official connection through Meta with no password sharing, limited permissions you can revoke yourself at any moment, encryption in transit and at rest, and no selling or repurposing of your data outside serving you.
+We know connecting your page to a third-party tool takes trust, and trust isn't requested — it's demonstrated: official connection through Meta with no password sharing, limited permissions you can revoke yourself at any moment, encryption in transit and AES-256-GCM on the access keys we store, and no selling or repurposing of your data outside serving you.
 
 If you have a security or privacy question we didn't answer here, write to us and we'll answer it in the same level of detail.
