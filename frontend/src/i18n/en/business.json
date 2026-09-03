@@ -65,6 +65,7 @@
     "email": "Email",
     "freeTextInstead": "Write it as free text instead",
     "fromFacebook": "From your Facebook Page: {value}",
+    "fromFacebookPrefix": "From your Facebook Page:",
     "fromFacebookHint": "This value was copied from your Facebook Page — no one typed it here. Review it and correct it if needed; it is used in replies only after you save.",
     "hint": "Confirmed facts answer customers directly.",
     "hint_address": "Where can customers find you?",
