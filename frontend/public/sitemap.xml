@@ -149,6 +149,24 @@
     <lastmod>2026-08-19</lastmod>
   </url>
 
+  <!-- Security &amp; Data Protection - Arabic -->
+  <url>
+    <loc>https://jawab24.com/security</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/security"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/security"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/security"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <!-- Security &amp; Data Protection - English -->
+  <url>
+    <loc>https://jawab24.com/en/security</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/security"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/security"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/security"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
   <!-- Instagram integration - Arabic -->
   <url>
     <loc>https://jawab24.com/instagram</loc>

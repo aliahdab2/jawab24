@@ -12,6 +12,7 @@ When a customer sends a WhatsApp message, writes a comment on a Facebook post, s
 The platform is built for the Middle East and North Africa (MENA) region, with particular focus on Saudi Arabia, UAE, Egypt, Kuwait, Qatar, and Libya.
 
 Website: https://jawab24.com
+Operated by: Mohammad Ali Ahdab, a Swedish sole trader (Enskild Näringsverksamhet) registered in Eslöv, Sweden — full details on https://jawab24.com/terms
 Category: Business SaaS, Customer Support Automation, AI Auto-Reply Platform
 Operating Systems: Web, Android
 
@@ -161,10 +162,13 @@ Available on Android via Google Play. Features:
 ## Security & Privacy
 
 - OAuth 2.0 authentication through Facebook (no password storage)
-- All data encrypted in transit (HTTPS/TLS) and at rest
+- All data encrypted in transit (HTTPS/TLS)
 - GDPR-compliant data handling with full data deletion support
 - Webhook signature verification (HMAC) for all integrations
 - Token encryption (AES-256-GCM) for stored credentials
+- Scope stated deliberately: encryption at rest covers the credential set (access tokens for connected Facebook, Instagram, WhatsApp and store accounts), not a blanket claim over conversation content, which is held on access-controlled servers in the European Union
+- Every sub-processor is named in the Privacy Policy — OpenAI, Meta, Stripe, Sentry, Resend, Google, Shopify, Salla, Zid — with no unnamed "trusted partners" category
+- Security page, with each claim and its scope: https://jawab24.com/security
 - Sentry error tracking for reliability monitoring
 - Availability: 99.97% uptime measured over 90 days (2026-05-21 to 2026-08-19) by UptimeRobot, an independent third-party monitor — the lower-scoring of two monitored endpoints, not their average: 3 incidents totalling 27 minutes — public status page: https://stats.uptimerobot.com/ijNBtFf9SC
 
@@ -267,6 +271,7 @@ Blog index: https://jawab24.com/blog
 - Privacy Policy: https://jawab24.com/privacy
 - Terms of Service: https://jawab24.com/terms
 - Trust & reliability: https://jawab24.com/trust
+- Security & data protection: https://jawab24.com/security
 - Live status page: https://stats.uptimerobot.com/ijNBtFf9SC
 - Facebook: https://facebook.com/jawab24app
 - Instagram: https://instagram.com/jawab24app

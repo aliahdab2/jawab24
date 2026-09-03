@@ -145,6 +145,32 @@ export default function MyDocument({ locale }: DocProps) {
                 BRAND_ASSETS.stores.googlePlay
               ],
               "foundingDate": "2024",
+              // Legal identity, copied VERBATIM from the operator block on
+              // /terms (§13) and /privacy — the two must never disagree, because
+              // a name or address that differs between our own pages is exactly
+              // what makes an external checker distrust both. Jawab24 trades as
+              // a Swedish sole trader (Enskild Näringsverksamhet), so the legal
+              // name IS the person's name and the registered address is the one
+              // filed with Bolagsverket.
+              // ⛔ The org. nr (a Swedish personnummer for a sole trader) is
+              // published on /terms because the law requires it there, and is
+              // deliberately NOT mirrored here: JSON-LD is ingested and repeated
+              // verbatim by assistants and scrapers, and amplifying a personal
+              // identity number into machine-readable markup is a different act
+              // from meeting a disclosure duty on one page. Add it only on an
+              // explicit decision by the owner.
+              "legalName": "Mohammad Ali Ahdab",
+              "founder": {
+                "@type": "Person",
+                "name": "Mohammad Ali Ahdab"
+              },
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "Bergavägen 15 A lgh 1002",
+                "postalCode": "241 39",
+                "addressLocality": "Eslöv",
+                "addressCountry": "SE"
+              },
               "numberOfEmployees": {
                 "@type": "QuantitativeValue",
                 "minValue": 1,

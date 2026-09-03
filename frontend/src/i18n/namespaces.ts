@@ -27,6 +27,7 @@ export const PAGE_NAMESPACES = {
   ecommerce:          ['ecommerce'],
   help:               ['help'],
   trust:              ['trust'],
+  security:           ['security'],
 
   unsubscribe:        ['unsubscribe'],
 
