@@ -277,12 +277,24 @@ Needed: Notification Email, Submission Email, Support Email, Support Phone, Priv
   is Saudi. Error text when empty: `FAQ URL: Invalid url`.
 - `Support Phone` — confirmed **optional** (no star). Leave empty; ⛔ do not invent a number.
 
-- **Support email — recommend `support@jawab24.com`** for all three fields (notification,
-  submission, support). The brief §7 left this `[TBD]` between that and a routed
-  `salla-support@jawab24.com`; a per-platform alias buys queue routing we do not need at zero
-  installs, and it is one more inbox to forget to monitor. Route by tag inside one inbox instead.
-  ⛔ Whichever is chosen must be a **real, monitored inbox with an auto-responder** before
-  submission — the reviewer may test it, and an unanswered support address is a rejection reason.
+- ✅ **Support email — `support@jawab24.com`, SETTLED 2026-09-03 (owner).** Use it for all three
+  fields (notification, submission, support). The brief §7 left this `[TBD]` between that and a
+  routed `salla-support@jawab24.com`; a per-platform alias buys queue routing we do not need at
+  zero installs, and it is one more inbox to forget to monitor. Route by tag inside one inbox.
+  **Deliverability verified 2026-09-03 against the live DNS**, not assumed: `jawab24.com` publishes
+  five `eforward{1..5}.registrar-servers.com` MX records (Namecheap email forwarding) and
+  `v=spf1 include:spf.efwd.registrar-servers.com ~all`; the owner confirms the `support@` alias
+  forwards to a monitored personal inbox. ⚠️ The absent-MX note in the deliverability audit is
+  about **`send.jawab24.com`** (the SES bounce-feedback record) — a different record, and unrelated
+  to whether support mail arrives.
+  ⛔⭐ **Two gaps forwarding does NOT close — both still open at submission time:**
+  (a) **no auto-responder.** Namecheap forwarding has none, and a Gmail vacation responder fires on
+  *all* mail to the destination account and answers *from* that personal address — which would
+  expose it to the reviewer. An unanswered support address is a rejection reason, so this needs a
+  real answer before Submit, not a forward.
+  (b) **receive-only.** No `Send mail as` alias exists, so nothing can be sent *from* support@;
+  relatedly `RESEND_REPLY_TO` is still unset in prod, so merchant-email footers print
+  `info@jawab24.com`. Neither blocks Save Draft.
 - ✅ **Privacy Policy URL — `https://jawab24.com/privacy`, ready to paste.**
   ⚠️ An earlier version of this file said the page carried "zero Salla/processor content" and had to
   be rewritten first. **That was wrong** — it repeated the brief's 2026-05-07 gap analysis without

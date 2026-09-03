@@ -41,8 +41,9 @@ Every actionable row above was fixed the same day, and Tier 0 of `SALLA_TEST_PLA
 - ⏭ `SALLA_APP_STORE_URL` remains unset **by design** — post-publish step.
 
 **Remaining distance to submit:** the listing build (see `docs/store-listing/salla/PORTAL_FIELD_MAP.md`),
-its remaining owner decisions (sub-category, support inbox, marketing sign-off — **countries decided
-2026-08-20: SA · UAE · KW**), the reviewer account + demo store (Service Trial section), then the
+its remaining owner decisions (sub-category, marketing sign-off — **countries decided
+2026-08-20: SA · UAE · KW**; **support inbox settled 2026-09-03: `support@jawab24.com`**, with only
+its auto-responder still owed), the reviewer account + demo store (Service Trial section), then the
 Phase 3 rehearsal.
 
 **What was actually approved on 2026-08-10 was the partner ID / payout verification, not an app
@@ -200,8 +201,14 @@ submission happens on the production app.
       **Usable drafts EXIST at `docs/store-listing/salla/`** (real AR app UI, verified specs,
       AR/EN benefit copy in `benefits.md`) — founder review pending; a designer pass is
       optional polish, not a blocker.
-- [ ] **Support inbox live** + auto-responder pasted (`SALLA_LAUNCH_ACTIONS.md` §2;
-      `jawab24.com/help` already live and linked).
+- [x] **Support inbox live** — `support@jawab24.com`, settled and confirmed 2026-09-03 (owner).
+      Verified against live DNS: Namecheap forwarding MX (`eforward{1..5}.registrar-servers.com`)
+      + matching SPF; the alias forwards to a monitored inbox. ⚠️ The "MX absent" line in the
+      deliverability audit is about `send.jawab24.com` (SES bounce feedback), not this.
+- [ ] **Auto-responder still owed** — forwarding provides none, and a Gmail vacation reply would
+      answer from the owner's personal address. Reviewer may test the address; an unanswered one
+      is a rejection reason (`SALLA_LAUNCH_ACTIONS.md` §2; `jawab24.com/help` already live and
+      linked). See `docs/store-listing/salla/PORTAL_FIELD_MAP.md` §5.
 - [ ] **CI green / deploys unblocked**: repo secrets `STRIPE_TEST_PUBLISHABLE_KEY` +
       `STRIPE_TEST_SECRET_KEY` restored (`gh secret set …`) so the pipeline + auto-deploy work
       on launch day (manual `scripts/deploy-production.sh` bypasses GitHub if needed).
