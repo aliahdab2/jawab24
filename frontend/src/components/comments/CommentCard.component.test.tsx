@@ -112,6 +112,29 @@ describe('CommentCard', () => {
     expect(screen.getByText('الرسوم 1500 ريال')).toBeInTheDocument();
   });
 
+  it('direction-detects the reply text, exactly as it does the incoming comment', () => {
+    // Found 2026-09-04 in the Arabic dashboard: the incoming comment carried
+    // dir="auto" and the reply bubble did not, so an English reply took the
+    // page's RTL base direction and painted its trailing punctuation on the
+    // wrong side — «…options for you.» rendered as «.…options for you».
+    // CommentDetailModal already had dir="auto" on this same field; only the
+    // card was missing it.
+    // ⚠️ jsdom does no bidi layout, so this asserts the ATTRIBUTE; the painted
+    // order was verified in real Chrome on /ar/comments.
+    const replied: Comment = {
+      ...baseComment,
+      replied: true,
+      replyText: 'Hi Fatima! We ship across Saudi Arabia. DM us your location.',
+      replyMethod: 'ai',
+    };
+    render(<CommentCard {...defaultProps} comment={replied} />);
+    const bubble = screen.getByText('Hi Fatima! We ship across Saudi Arabia. DM us your location.');
+    expect(
+      bubble.getAttribute('dir'),
+      'the reply bubble lost dir="auto" — a Latin reply will paint right-to-left in the Arabic dashboard',
+    ).toBe('auto');
+  });
+
   describe('reply source indicator', () => {
     it('shows Smart Reply indicator for AI replies', () => {
       const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'ai' };
