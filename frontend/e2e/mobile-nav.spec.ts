@@ -260,15 +260,26 @@ test.describe('Mobile Navigation', () => {
     await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.team'), exact: true })).not.toBeVisible();
   });
 
-  // Stores is admin-only while we finish the public roll-out. A regular
-  // merchant should NOT see the entry in the More overlay; an admin should.
-  test('Stores item is hidden from non-admins in the More overlay', async ({ page }) => {
+  // Stores (/integrations) was admin-only during the public roll-out. The gate came
+  // off 2026-09-04 (owner ruling, #1048) because the Salla App Store listing's first
+  // gallery image IS this screen — a listing may not advertise a page the merchant
+  // who installs it cannot open. Sidebar.tsx and the page-level guard in
+  // pages/integrations.tsx both dropped it; these two cases replace the pair that
+  // pinned the gate. They are the MOBILE half: the nav entry can only be reached
+  // through the More overlay on a phone, so a desktop-only unit test on
+  // getNavigationGroups cannot see a regression here.
+  test('Stores item is reachable for a NON-admin merchant in the More overlay', async ({ page }) => {
     await setupAuth(page, { user: { hasEcommerceStore: true, isAdmin: false } });
     await mockAPIs(page);
     await gotoWithMobileNav(page);
 
     await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true })).not.toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true }),
+      'Stores is hidden from merchants on mobile again — gallery-1 of the Salla listing ' +
+        'shows this screen, so hiding it makes the listing advertise a page the ' +
+        'installing merchant cannot reach',
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('Stores item is reachable for admins in the More overlay', async ({ page }) => {
