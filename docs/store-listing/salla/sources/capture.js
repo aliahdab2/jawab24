@@ -44,8 +44,22 @@ const { execFileSync } = require('child_process');
 const REPO = path.resolve(__dirname, '../../../..');
 const { chromium, expect } = require(path.join(REPO, 'node_modules/@playwright/test'));
 
-/** The marketing frame crops to roughly the first two comment cards. */
-const CROP_VISIBLE_CARDS = 2;
+/** Cards whose tops are within this many px of each other are one visual row. */
+const ROW_TOLERANCE_PX = 40;
+
+/** Ceiling for the latency badge the gallery publishes. Production p50 is 2.72 s
+ *  (D-049); this allows headroom for a locally-run worker without advertising a
+ *  number worse than a merchant would actually see. */
+const MAX_SHOWN_LATENCY_MS = 3500;
+
+/** Re-asks allowed before the shoot gives up. Each one is a real, billed model call. */
+const MAX_REPLY_ATTEMPTS = 5;
+
+/** Four+ Arabic letters in a row — a sentence, not a stray character. */
+const ARABIC_RUN = /[\u0600-\u06FF]{4,}/;
+
+/** Latin OR Arabic-Indic digits — the model answers «٤٥٠ ريال» as often as «450». */
+const PRICE_DIGIT = /[0-9\u0660-\u0669\u06F0-\u06F9]/;
 
 const BASE = process.env.SHOT_BASE || 'http://localhost:3201';
 const API = process.env.SHOT_API || 'http://localhost:3200';
@@ -112,6 +126,11 @@ async function main() {
 
     if (prepare) await prepare(page);
 
+    // Park the pointer off-canvas: `prepare` clicks things, and a button left in its
+    // hover/active state is a visible artifact in a marketing screenshot (the «مسح»
+    // button sat tinted red in one 2026-09-04 gallery-2 because a rejected reply
+    // attempt had just cleared the thread).
+    await page.mouse.move(0, 0);
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(OUT, name) });
@@ -129,30 +148,77 @@ async function main() {
   });
 
   await shot('raw-comments.png', '/ar/comments', async (p) => {
+    const cards = p.getByRole('button', { name: /^فتح تعليق من/ });
+
     // Land on the auto-replied tab: the caption is «يرد على تعليقات فيسبوك وإنستغرام
     // تلقائياً», so the shot must show replies, not a backlog of unanswered comments.
     await p.locator('button', { hasText: 'تم الرد تلقائياً' }).first().click();
 
-    // ⛔ The frame crops to the first two cards, and the seeder's ordering decides
-    // which two. On 2026-09-04 that put two ENGLISH conversations at the top of a
-    // shot captioned in Arabic, for the SAUDI Salla store — and the approved
-    // shot-list (.planning/SALLA_LISTING_BRIEF.md §4, shot 3) specifies an Arabic
-    // customer comment. Ordering is not something to hope for, so assert it.
-    // The card's own accessibility contract — role="button" + aria-label
-    // «فتح تعليق من {name}» (comments.openComment). Used in preference to a
-    // class selector, which would break on any restyle without saying so.
-    const cards = p.getByRole('button', { name: /^فتح تعليق من/ });
-    await expect(cards.first()).toBeVisible();
-    const visible = Math.min(await cards.count(), CROP_VISIBLE_CARDS);
-    for (let i = 0; i < visible; i++) {
-      const text = await cards.nth(i).innerText();
-      if (!/[\u0600-\u06FF]{4,}/.test(text)) {
-        throw new Error(
-          `comment card ${i + 1} of ${visible} inside the crop has no Arabic conversation. ` +
-          'The Salla listing needs Arabic pairs above the fold — re-order the fixtures ' +
-          'or widen the crop, do not ship this shot.',
+    // ⛔ WAIT FOR THE FILTER TO APPLY, do not assume the click was synchronous.
+    // `expect(cards.first()).toBeVisible()` passes instantly on the PREVIOUS tab's
+    // cards, so the checks below silently graded the wrong list — the first version
+    // of this guard read «بحاجة اهتمام» and passed a shot of «تم الرد تلقائياً».
+    // An auto-replied card always has TWO <p> (comment + reply); an unreplied one has
+    // one. "Every card has a reply" is therefore the filter having actually landed.
+    await expect
+      .poll(async () => {
+        const n = await cards.count();
+        if (n === 0) return -1;
+        const counts = await Promise.all(
+          Array.from({ length: n }, (_, k) => cards.nth(k).locator('p').count()),
         );
-      }
+        return counts.every((c) => c >= 2) ? n : 0;
+      }, { timeout: 15000, message: 'the «تم الرد تلقائياً» filter never applied' })
+      .toBeGreaterThan(0);
+
+    // ⛔ WHICH CARDS ARE ACTUALLY IN THE SHOT IS A GEOMETRIC QUESTION, not a DOM one.
+    // The list is a two-column grid that fills BY COLUMN: dom[0] and dom[1] are the
+    // right column top-to-bottom, dom[2] and dom[3] the left. So the visually-first
+    // ROW is dom[0] and dom[2]. A guard that checked the first two in DOM order read
+    // one whole column, passed, and let a shot ship whose first row held an English
+    // conversation — which is exactly what happened on 2026-09-04.
+    //
+    // The requirement comes from the approved shot-list (.planning/SALLA_LISTING_BRIEF.md
+    // §4, shot 3): «Customer comment in Arabic + AI reply showing product detail».
+    // It asks for an Arabic pair to be PRESENT, not for English to be absent — a
+    // bilingual row is a fair advert for a product that answers in both. So: the top
+    // row must contain at least one fully-Arabic conversation, and it must quote a
+    // price, because that is what the listing claims the replies do.
+    const boxes = await Promise.all(
+      Array.from({ length: await cards.count() }, async (_, k) => ({
+        k,
+        y: (await cards.nth(k).boundingBox())?.y ?? Infinity,
+      })),
+    );
+    const topY = Math.min(...boxes.map((b) => b.y));
+    const topRow = boxes.filter((b) => b.y - topY < ROW_TOLERANCE_PX);
+    if (topRow.length === 0) throw new Error('no comment cards are visible to shoot');
+
+    const conversations = await Promise.all(
+      topRow.map(async ({ k }) => {
+        const ps = cards.nth(k).locator('p');
+        return {
+          comment: (await ps.nth(0).innerText()).trim(),
+          reply: (await ps.nth(1).innerText()).trim(),
+        };
+      }),
+    );
+
+    const arabicPair = conversations.find(
+      (c) => ARABIC_RUN.test(c.comment) && ARABIC_RUN.test(c.reply),
+    );
+    if (!arabicPair) {
+      throw new Error(
+        'the top row of the comments shot has no Arabic conversation. The approved ' +
+        'shot-list requires «Customer comment in Arabic»; re-order the fixtures and ' +
+        `re-run. Top row was: ${JSON.stringify(conversations.map((c) => c.comment))}`,
+      );
+    }
+    if (!PRICE_DIGIT.test(arabicPair.reply)) {
+      throw new Error(
+        'the Arabic reply in the top row quotes no number, so it is not showing the ' +
+        `product detail the caption promises: "${arabicPair.reply}"`,
+      );
     }
   });
 
@@ -160,28 +226,56 @@ async function main() {
     await p.locator('button', { hasText: 'اختبار الرد الذكي' }).first().click();
     const box = p.locator('textarea').last();
     await expect(box).toBeVisible();
-    await box.fill('السلام عليكم، كم سعر العباية السوداء؟ وهل متوفر مقاس M؟');
-    await p.keyboard.press('Enter');
 
-    // A REAL OpenAI round trip through the local ai-worker. Waiting on the reply
-    // itself rather than on a stopwatch: a fixed sleep shoots whatever is on screen
-    // when it expires, so a cold worker or a slow model silently produced a
-    // screenshot of a spinner.
-    // The BUBBLE only — deliberately not the whole message row, which also holds
-    // the latency badge. Reading the row would make the "quotes a number" check
-    // below vacuously true, since «3377 مللي ثانية» always contains digits.
-    const reply = p.getByTestId('test-reply-assistant-bubble').last();
-    await expect(reply).toBeVisible({ timeout: 60000 });
-    const text = (await reply.innerText()).trim();
+    // ⛔ THE REPLY IS A REAL MODEL CALL, SO IT IS NOT THE SAME TWICE. Across the
+    // 2026-09-04 shoots the same question came back as a clean one-liner at 3377 ms
+    // and, on the next run, as a three-line answer with two raw product URLs at
+    // 4883 ms. Whether the storefront's flagship screenshot is good was luck.
+    //
+    // So the acceptance criteria are written down and the question is re-asked until
+    // one is met. This samples for a REPRESENTATIVE reply, not a flattering outlier:
+    // the latency ceiling is the measured production p50 band (2.72 s, D-049) plus
+    // headroom for a cold local worker — we will not advertise slower than typical,
+    // and we will not pretend to be faster either.
+    for (let attempt = 1; ; attempt++) {
+      await box.fill('السلام عليكم، كم سعر العباية السوداء؟ وهل متوفر مقاس M؟');
+      await p.keyboard.press('Enter');
 
-    // The caption claims the reply quotes real catalog prices. A quota wall, an
-    // empty reply or a refusal all render in this same bubble and all look like a
-    // successful shoot in the PNG.
-    if (!/\d/.test(text)) {
-      throw new Error(`reply quotes no number, so it cannot be quoting a price: ${text}`);
-    }
-    for (const bad of ['تم الوصول للحد الشهري', 'حدث خطأ', 'عذراً']) {
-      if (text.includes(bad)) throw new Error(`reply is an error/quota message, not an answer: ${text}`);
+      // Wait on the reply itself, never a stopwatch: a fixed sleep shoots whatever is
+      // on screen when it expires, which is how a spinner gets into a gallery.
+      const reply = p.getByTestId('test-reply-assistant-bubble').last();
+      await expect(reply).toBeVisible({ timeout: 60000 });
+      const text = (await reply.innerText()).trim();
+      const latency = Number(
+        ((await p.getByText(/مللي ثانية/).last().innerText()).match(/(\d+)/) || [])[1],
+      );
+
+      const reject =
+        // A quota wall, an error or a refusal renders in this same bubble and looks
+        // like a successful shoot in the PNG.
+        ['تم الوصول للحد الشهري', 'حدث خطأ', 'عذراً'].find((b) => text.includes(b)) ? 'error/quota reply' :
+        // The caption promises the reply quotes real prices.
+        !PRICE_DIGIT.test(text) ? 'reply quotes no number' :
+        // Raw product URLs are real behaviour but read as clutter at gallery size,
+        // and push the bubble to three lines. A presentation choice for this asset —
+        // NOT a claim that replies never carry links.
+        /https?:\/\//.test(text) ? 'reply contains raw URLs' :
+        latency > MAX_SHOWN_LATENCY_MS ? `latency ${latency} ms is above the ${MAX_SHOWN_LATENCY_MS} ms ceiling` :
+        null;
+
+      if (!reject) {
+        console.log(`reply accepted on attempt ${attempt} (${latency} ms): ${text}`);
+        break;
+      }
+      console.log(`attempt ${attempt} rejected — ${reject}`);
+      if (attempt >= MAX_REPLY_ATTEMPTS) {
+        throw new Error(
+          `no acceptable reply in ${MAX_REPLY_ATTEMPTS} attempts (last: ${reject}). ` +
+          'Warm the ai-worker and re-run; do not ship the rejected shot.',
+        );
+      }
+      await p.locator('button', { hasText: 'مسح' }).first().click();
+      await expect(p.getByTestId('test-reply-assistant-bubble')).toHaveCount(0);
     }
   });
 

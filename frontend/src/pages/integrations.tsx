@@ -688,18 +688,16 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 const IntegrationsPage: NextPageWithLayout = () => {
   const tInt = useTranslations('integrations');
   const router = useRouter();
-  const { isAuthenticated, user, _hasHydrated } = useAuthStore();
-  const isAdmin = !!user?.isAdmin;
+  const { isAuthenticated } = useAuthStore();
 
-  // Page is admin-only while we finish public roll-out. Non-admins get
-  // redirected silently to the dashboard. Wait for store hydration before
-  // deciding so we don't bounce a real admin on first paint.
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (isAuthenticated && !isAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [_hasHydrated, isAuthenticated, isAdmin, router]);
+  // GA for all merchants (owner ruling 2026-09-04). This page used to read
+  // `user.isAdmin` and silently `router.replace('/dashboard')` every non-admin
+  // while the public roll-out finished. The gate came off because the Salla App
+  // Store listing's first gallery image IS this screen, and a listing may not
+  // advertise a page the merchant who installs it cannot open. The matching nav
+  // gate in Sidebar.tsx went with it, so the entry and the route agree.
+  // `user` and `_hasHydrated` were read ONLY by that guard and are gone with it —
+  // the page's own data load keys off `isAuthenticated` below.
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
   const [connectAvailability, setConnectAvailability] = useState<Partial<Record<PlatformId, boolean>>>({});

@@ -60,18 +60,17 @@ case "${1:-}" in
     # demo banner keys off the same check — so a demo-shaped account cannot produce a
     # merchant-shaped screenshot however the data is named.
     #
-    # ⚠️ `is_admin = true` is required ONLY because /integrations and its «المتاجر» nav
-    # item are still admin-gated (Sidebar.tsx getNavigationGroups, integrations.tsx
-    # redirect). That gate is the reason gallery-1 shows a screen a merchant cannot
-    # open — see ../README.md, "What a merchant can and cannot see". Drop this flag as
-    # soon as the gate goes, and re-shoot.
+    # ⚠️ NOT an admin account. `is_admin` stays false: /integrations and its «المتاجر»
+    # nav item went GA on 2026-09-04, so a plain merchant sees exactly what the gallery
+    # shows. The flag used to be set here purely to make gallery-1 shootable, which was
+    # the tell that the shot was advertising an admin-only screen — do not put it back.
     #
     # One transaction: a partial stage is worse than a failed one, because the failure
     # is visible and the partial is not.
     "${PSQL[@]}" -q -1 <<'SQL'
 delete from pages where name <> 'أزياء الخليج';
 delete from ecommerce_stores where platform <> 'salla';
-update users set name = 'نورة الحربي', facebook_id = 'fb_10021547', email = 'noura@gulf-fashion.sa', is_admin = true;
+update users set name = 'نورة الحربي', facebook_id = 'fb_10021547', email = 'noura@gulf-fashion.sa', is_admin = false;
 update workspaces set name = 'أزياء الخليج';
 SQL
 

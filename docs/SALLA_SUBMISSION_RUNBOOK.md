@@ -194,20 +194,19 @@ submission happens on the production app.
       `SALLA_EASY_MODE_CLAIM_ENABLED`.
 - [ ] **Marketing sign-off** on listing copy §1–2 (`.planning/SALLA_LISTING_BRIEF.md` — honesty
       pass done 2026-07-05; sales-rep frame per D-014, no transact verbs, no "AI agent").
-- [ ] **Assets RE-SHOT 2026-09-04, 1 of 3 gallery images shippable** (spec in
-      `SALLA_LAUNCH_ACTIONS.md` §3): 3 App Gallery @ 1366×768, 3 Key Benefits @ 1600×1600,
-      icon 512×512 — all at `docs/store-listing/salla/`, all real Arabic app UI. The re-shoot
-      replaced the dev-fixture names («Test User», «Test Page», «متجر تجريبي») with one
-      realistic Salla merchant per the owner's 2026-09-03 decision, and the shoot is now
-      reproducible from `sources/capture.js` with the raws committed beside it.
-      ⛔ **Two gallery images are NOT uploadable yet** — both found on review, both written up
-      with their fixes in `docs/store-listing/salla/README.md` → «What still needs a re-shoot»:
-      **gallery-1** shows `/integrations`, which is admin-only in production, so it advertises
-      a screen no merchant can open (drop the gate, or re-shoot on `/salla/onboarding`);
-      **gallery-3**'s crop landed two English conversations under an Arabic caption, against
-      the approved shot-list's «comment in Arabic» (re-order the fixtures and re-run —
-      `capture.js` now fails the shoot on this). gallery-2 and the three benefit images are
-      fine. ⏭ Founder eyeball still owed on all of them.
+- [x] **Assets RE-SHOT and review-corrected 2026-09-04** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
+      3 App Gallery @ 1366×768, 3 Key Benefits @ 1600×1600, icon 512×512 — all at
+      `docs/store-listing/salla/`, all real Arabic app UI, shot as a plain merchant account.
+      The re-shoot replaced the dev-fixture names («Test User», «Test Page», «متجر تجريبي»)
+      with one realistic Salla merchant per the owner's 2026-09-03 decision.
+      A review of the first shoot found three problems, all now closed and all now
+      enforced by `sources/capture.js` rather than by care: gallery-1 showed the
+      admin-only `/integrations` (**the gate was dropped**, owner ruling 2026-09-04, so
+      merchants see it too); gallery-3's crop was English-only because the demo comment
+      fixtures were randomly ordered (**fixed at the root** — explicit `minutesAgo`, Arabic
+      pairs newest); gallery-2's reply was whatever the model happened to say (**now gated**
+      on price, no raw URLs, and ≤3500 ms). Details in
+      `docs/store-listing/salla/README.md`. ⏭ Founder eyeball still owed.
       ⏭ Still open: the optional **YouTube link ≤2 min** (only if the wizard enforces the
       Educational Video field — test that first, see Phase 2 step 1).
 - [x] **Support inbox live** — `support@jawab24.com`, settled and confirmed 2026-09-03 (owner).
@@ -295,8 +294,8 @@ submission happens on the production app.
 - [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
-      (⛔ only `gallery-2.png` is uploadable as shot — gallery-1 and gallery-3 each need
-      work first, see `docs/store-listing/salla/README.md` → «What still needs a re-shoot»)
+      (all three images are READY — `docs/store-listing/salla/gallery-{1,2,3}.png`, re-shot
+      and review-corrected 2026-09-04; what is left is the portal sitting that uploads them)
 - [ ] A real Salla store connected end-to-end — install + token push + claim ✅ 2026-08-23 (demo
       store, D-093) — **but the store row was later DELETED (discovered 2026-08-30) and the 08-23
       21:30 re-push expired unclaimed.** Rebuild: *Reauthorize App* in the demo-store admin →

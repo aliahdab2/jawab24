@@ -175,19 +175,19 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
     { key: 'nav.settings', href: '/settings', icon: Settings },
   ];
 
-  // Stores is admin-only while we finish the public roll-out (Shopify App
-  // Store listing, Salla/Zid backend reliability parity). Once those land
-  // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
-  // this so deep-links also fail closed.
+  // Stores (/integrations) is GA for all merchants (owner ruling 2026-09-04).
+  // It was admin-only during the public roll-out; the gate came off for the Salla
+  // App Store listing, whose first gallery image IS this screen — a listing may
+  // not advertise a page the merchant who installs it cannot open. The page-level
+  // guard in pages/integrations.tsx was dropped in the same change, so the nav
+  // entry and the route agree; `docs/store-listing/salla/README.md` records why.
   const overviewItems = [
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },
     // Business surface (/business): GA for all merchants (owner ruling
     // 2026-08-15) — previously behind a workspace allowlist during dogfooding.
     { key: 'nav.business', href: '/business', icon: Tag },
-    ...(options.isAdmin
-      ? [{ key: 'nav.integrations', href: '/integrations', icon: Store }]
-      : []),
+    { key: 'nav.integrations', href: '/integrations', icon: Store },
   ];
 
   return [

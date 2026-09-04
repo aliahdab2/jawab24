@@ -14,7 +14,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 import { db } from '../../src/db';
-import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS, renderDemoDamascusLists } from '../../src/plugins/demo/seedData';
+import { seedDemoData, DEMO_PAGES, DEMO_COMMENTS, DEMO_DISTRIBUTOR_COLLECTIONS, renderDemoDamascusLists } from '../../src/plugins/demo/seedData';
 import {
     DAMASCUS_COURSE_PRICES,
     DAMASCUS_ONLINE_COURSES,
@@ -377,5 +377,57 @@ describe('damascus fact-collections fixture (schedules slice, D-052)', () => {
         expect(kb).toContain('برامكة سانا');                       // address
         expect(kb).toContain('شهادة دولية 250');                   // certificate fees stay prose
         expect(kb).toContain('كل 100 ليرة قديمة تساوي 1 ليرة جديدة'); // currency note
+    });
+});
+
+/**
+ * The demo inbox must arrive in the SAME ORDER on every seed.
+ *
+ * It did not until 2026-09-04: both comment insert sites used
+ * `Date.now() - Math.random() * 3 days`, so the list was shuffled on each seed. Two
+ * consequences, one merchant-facing and one that shipped:
+ *
+ *   - a merchant re-opening the demo saw a different inbox each time
+ *   - the Salla App Store gallery caught a row of two ENGLISH conversations under an
+ *     Arabic caption, because which comments land in the screenshot's crop is decided
+ *     by this ordering (docs/store-listing/salla/README.md)
+ *
+ * Mutation checks (each must turn one of these red):
+ *   - drop a `minutesAgo` from any DEMO_COMMENTS entry
+ *   - give the fashion-store English comment a smaller `minutesAgo` than the Arabic ones
+ */
+describe('DEMO_COMMENTS ordering is deterministic', () => {
+    const ARABIC_RUN = /[\u0600-\u06FF]{4,}/;
+
+    it('gives every comment an explicit age, so nothing is left to Math.random()', () => {
+        const missing = DEMO_COMMENTS.filter(
+            (c) => typeof c.minutesAgo !== 'number' || !Number.isFinite(c.minutesAgo),
+        );
+        expect(
+            missing.map((c) => c.facebookCommentId),
+            'every demo comment needs an explicit minutesAgo — a missing one falls back to ' +
+                'insertion order and re-introduces the shuffled inbox',
+        ).toEqual([]);
+    });
+
+    it('gives every comment a DISTINCT age, so the order is total', () => {
+        const ages = DEMO_COMMENTS.map((c) => c.minutesAgo);
+        expect(new Set(ages).size, 'two comments share a minutesAgo — their relative order is undefined').toBe(ages.length);
+    });
+
+    it('puts an Arabic fashion-store conversation newest, ahead of the English ones', () => {
+        // Posts 6 and 7 are the fashion store — the page the Salla listing screenshots.
+        const fashion = DEMO_COMMENTS.filter((c) => c.postIndex === 6 || c.postIndex === 7);
+        expect(fashion.length, 'the fashion-store fixtures moved — this pin needs re-aiming').toBeGreaterThan(1);
+
+        const replied = fashion.filter((c) => c.replied);
+        const newest = replied.reduce((a, b) => (a.minutesAgo <= b.minutesAgo ? a : b));
+
+        expect(
+            ARABIC_RUN.test(newest.message) && ARABIC_RUN.test(newest.replyText ?? ''),
+            `the newest replied fashion comment is not an Arabic conversation (${newest.fromName}: ` +
+                `"${newest.message}") — the Salla gallery crops to the newest cards, and its ` +
+                'caption is Arabic',
+        ).toBe(true);
     });
 });
