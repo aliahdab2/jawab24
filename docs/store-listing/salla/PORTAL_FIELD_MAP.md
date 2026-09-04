@@ -334,22 +334,32 @@ Jawab24 has **no password login** (Facebook / phone-OTP / demo mode), so *Test U
 email, *Test Password* = the Facebook account's password, and the instructions must say
 «سجّل الدخول عبر فيسبوك». A phone-OTP account cannot serve a reviewer.
 
-⚠️ **This account also carries the Zid demo.** Its page «Jawab24 Test» is linked to the Zid demo
-store, so the Salla store gets a **second** page (created on the same Facebook account) — and the
-instructions must name that page for the smart-reply test. ⛔ Never re-link «Jawab24 Test».
+⚠️ **This account also carries the Zid demo.** It holds **three** pages, all created 2026-09-03:
+«Jawab24 Test» (linked to the Zid demo store), **«Jawab24 Salla Test»** (linked to the Salla
+store 2026-09-04) and «Jawab24 Shopify Test» (unlinked). The instructions must **name** the Salla
+page — it renders **third** in the list, so never describe it by position. ⛔ Never re-link
+«Jawab24 Test»: the picker has no "already linked" marker and `linkStoreToPage` rebinds silently.
 
-🔴 **Step 1 of the instructions below is currently FALSE for the reviewer (found 2026-09-03):**
-the «المتاجر» page (`/integrations`) is **admin-only** — `frontend/src/pages/integrations.tsx`
-redirects any non-admin to `/dashboard` ("while we finish public roll-out"). Making the review
-account an admin is not acceptable (admins see every real merchant). **Resolved 2026-09-03 by
-rewriting the instructions around `/salla/onboarding`** (auth-only, not admin-gated — verified;
-its step 1 shows «تم ربط المتجر» + store name and triggers a product sync, then reports
-«تمت مزامنة N منتج»). Lifting the admin gate was considered and **deferred: Zid app 7367 is under
-review, and opening `/integrations` would expose Zid's Connect button to every merchant mid-review.**
-Revisit after the Zid verdict (together with server-side capabilities gating for Zid/Shopify).
-⚠️ The wizard's next step lists every page with a Link button and rebinds silently — the
-instructions must tell the reviewer to stop after the sync line and NOT press «ربط صفحة».
-Re-verify steps 1–3 **as the review account, in production** before submitting.
+✅ **Step 1 is back on «المتاجر» — the admin gate came OFF in #1048 (deployed `d069cc5`).**
+This supersedes the 2026-09-03 note that rewrote step 1 around `/salla/onboarding` because
+`integrations.tsx` redirected every non-admin to `/dashboard`. **Verified live 2026-09-04 as the
+review account (`isAdmin:false`) on production:** «المتاجر» renders, showing a «تكامل سلة» section
+with the store card («متجر تجريبي», «المنتجات المزامنة: 20», last-sync line) and a separate
+«تكامل زد» section. The connect dead end stays shut by the `isConnectAvailable` guard, not by the
+page gate, so the removal is safe (see the runbook's "Connect dead end" section).
+
+⛔ **Why the instructions no longer walk `/salla/onboarding` at all:** its step 2 is the page
+picker, and it lists «Jawab24 Test» as a plain option with **no warning**. Sending a reviewer
+through a screen where one wrong click steals the Zid demo store is an avoidable risk — «المتاجر»
+is read-only for what they need to see. (The same selector exists on the «تكامل سلة» card, so the
+instructions say explicitly not to touch it.)
+
+⭐⭐ **Locale: do NOT "fix" the Arabic instructions to English.** The review account rendered in
+**English** during the 2026-09-04 walk, which looks like the instructions naming Arabic labels are
+wrong. They are not. The language lives in **`localStorage.ui-storage`** (`{"language":"en"}`) — a
+**per-browser** value, not an account setting; `next.config.js` sets `defaultLocale: 'ar'` with
+`localeDetection: false`, so a reviewer on a fresh browser gets the **Arabic** UI. The English
+rendering was an artifact of this machine.
 
 ⭐ **Measured 2026-08-20 — and it overturned a prediction worth recording.** All four fields carry a
 required star, from which it was inferred that the draft could not be saved until the reviewer
@@ -368,29 +378,69 @@ read which fields the validator actually names, rather than inferring the blocki
 ```
 مرحباً بفريق مراجعة سلة،
 
-بعد تسجيل الدخول بالبيانات أعلاه:
-
-1. افتح الرابط https://jawab24.com/salla/onboarding ثم اضغط «ابدأ الآن» — ستظهر رسالة
-   «تم ربط المتجر!» مع اسم المتجر، ثم تبدأ مزامنة المنتجات تلقائياً حتى تظهر
-   «تمت مزامنة N منتج» (المنتجات والأسعار تُقرأ مباشرةً من سلة). وإن ظهرت رسالة
-   «فشلت مزامنة المنتجات» فاضغط «إعادة المزامنة»؛ منتجات المتجر مزامَنة مسبقاً على أي حال،
-   ويمكنكم متابعة الخطوة التالية.
-2. توقّف عند هذه الخطوة ولا تضغط «ربط صفحاتك الاجتماعية» — الصفحة مرتبطة مسبقاً.
-3. من القائمة الجانبية افتح «قنوات التواصل»، ثم على بطاقة صفحة
-   «<اسم الصفحة المرتبطة بمتجر سلة>» اضغط «اختبار الرد الذكي» واكتب سؤالاً مثل:
-   «كم سعر ...؟» — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي من كتالوج المتجر.
-   (ملاحظة: الحساب يحوي صفحة ثانية مرتبطة بمتجر آخر لأغراض الاختبار؛ يُرجى استخدام
-   الصفحة المذكورة أعلاه.)
-
-جواب24 تطبيق يعمل خارج واجهة المتجر: يقرأ منتجات المتجر وأسعارها ليجيب عملاءكم على
+جواب24 تطبيق يعمل خارج واجهة المتجر: يقرأ منتجات متجرك وأسعارها ليجيب عملاءك على
 واتساب وفيسبوك وإنستغرام. لا يضيف أي عنصر إلى واجهة المتجر ولا يعدّل عليها.
+
+سجّل الدخول عبر «تسجيل الدخول بفيسبوك» بالبيانات أعلاه، ثم:
+
+1. من القائمة الجانبية افتح «المتاجر». ستجد قسم «تكامل سلة» وفيه بطاقة المتجر
+   «متجر تجريبي» مع سطر «المنتجات المزامنة: 20» وتاريخ آخر مزامنة — أي أنّ الكتالوج
+   يُقرأ مباشرةً من سلة. (لا حاجة إلى الضغط على أي زر في هذه الصفحة.)
+
+2. من القائمة الجانبية افتح «قنوات التواصل». ستظهر عدّة بطاقات صفحات؛ اختر البطاقة
+   المسماة «Jawab24 Salla Test» — وهي الوحيدة التي تحمل العبارة
+   «ردود ذكية مدعومة بمتجرك على سلة».
+
+3. في تلك البطاقة اضغط «اختبار الرد الذكي»، واكتب سؤالاً عن أحد منتجات المتجر، مثل:
+   «كم سعر التنورة؟» أو «ما المقاسات المتوفرة من الفستان؟» — سيأتي الرد مقتبساً
+   بيانات المنتج وسعره الحقيقي من كتالوج المتجر على سلة.
+
+ملاحظتان:
+• يحتوي الحساب على صفحتين أخريين مخصّصتين لاختبار منصّات أخرى؛ يُرجى استخدام الصفحة
+  المذكورة في الخطوة 2.
+• الردود التلقائية مُعطَّلة في هذا الحساب كي لا تُرسل رسائل فعلية أثناء المراجعة؛
+  وزر «اختبار الرد الذكي» يعمل بصورة كاملة دون الحاجة إلى تفعيلها.
 
 لأي استفسار: support@jawab24.com
 ```
 
-⭐⭐ **Every label above was WALKED in a running build on 2026-09-04** — the local worktree
-stack, Arabic UI, signed in as a merchant-shaped account — because the reviewer follows the
-text literally and the previous draft carried three literal mismatches:
+⛔⭐ **Do not let the reviewer near the page selector.** The «تكامل سلة» card carries
+«اختر الصفحة التي تستخدم بيانات منتجات سلة للردود الذكية», which rebinds silently — hence step 1
+says explicitly that no button needs pressing. The old step-1/2 pair (walk `/salla/onboarding`,
+then "stop and do not press «ربط صفحاتك الاجتماعية»") is deleted: instructing someone *not* to
+press a button on a screen you sent them to is a weaker guarantee than not sending them there.
+
+⏭ **One recommendation for the sitting, owner's call.** Every product name in the demo store is
+duplicated at different prices (5 × «تنورة» at 79/83/94/114/124 SAR, 3 × «بنطلون», 3 × «فستان»),
+so **any** «كم سعر X؟» resolves to a *range*, and D-092's summary truncation makes those ranges
+understate: on 2026-09-04 the app answered «من 83 إلى 114» for skirts whose true span is 79–124
+(`product_summary` is 1460 chars, ends in «...», and carried only 2 of the 5). The prices are real
+and the answer is faithful to its context, but a reviewer who cross-checks the storefront can find
+the mismatch. Cheapest remedy, entirely in our hands: **give a few demo products distinct names**
+in the Salla demo store so a price question has one unambiguous answer. Alternative: leave it and
+accept the risk. ⛔ Not a code change — do not touch D-092 for the listing.
+
+⭐⭐ **RE-WALKED IN PRODUCTION 2026-09-04, as the review account itself** (`isAdmin:false`), which
+is the check the previous pass could not make — it ran against a local worktree build. Every label
+in the block above is now sourced two ways: the **structure** (which page, which section, which
+card, which button) confirmed live on `jawab24.com`, and the **exact Arabic string** read from
+`frontend/src/i18n/ar/*.json` rather than transcribed by eye:
+
+| Instruction text | i18n key |
+|---|---|
+| «المتاجر» | `nav.integrations` / `sidebar.integrations` / `integrations.title` |
+| «قنوات التواصل» | `nav.channels` / `pages.titleChannels` |
+| «ردود ذكية مدعومة بمتجرك على سلة» | `pages.storeConnectedBadge` + `integrations.platformPicker.salla` |
+| «اختبار الرد الذكي» | `testSmartReply.title` |
+| «المنتجات المزامنة» | `salla.products` |
+| «تكامل سلة» | `salla.integration` |
+| «اختر الصفحة التي تستخدم بيانات منتجات سلة للردود الذكية» | `salla.linkPageDesc` |
+
+⚠️ Reading the string from the JSON is what makes this durable: the labels drift with the UI, and a
+key rename shows up as a missing key here rather than as silent prose rot. Re-run the two-way check
+before Submit.
+
+**The previous pass (local build, 2026-09-04) found three literal mismatches, kept as precedent:**
 
 | The old text said | What the app actually shows |
 |---|---|
