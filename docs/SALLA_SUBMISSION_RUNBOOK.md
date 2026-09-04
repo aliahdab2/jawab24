@@ -351,14 +351,32 @@ Summary of the gates:
 - [ ] Install onto a real store → token push → pending install → claim binds by owner-email
       match → products sync.
 - [ ] Test reply quotes a real product name **and price** from the live catalog.
-- [x] `order.created` → **exactly one** customer SMS. ✅ 2026-08-25 (confirmed admin order
-      `#279682567`; a Draft fires nothing — the Confirm dialog is what creates the order).
-- [x] `order.status.updated`(shipped) → one SMS row held for the 5-min grace, then sent.
-      ✅ 2026-08-24 + 2026-08-25. ⚠️ The `order.shipment.created` half (tracking upgraded
-      **in place**, PR #411 design note) is NOT verifiable on a demo store — the label flow
+- [~] `order.created` → **exactly one** customer notification row. ✅ 2026-08-25 (confirmed admin
+      order `#279682567`; a Draft fires nothing — the Confirm dialog is what creates the order).
+      ⚠️ **Proved on the SMS rail, which no longer exists — see the note below.**
+- [~] `order.status.updated`(shipped) → one row held for the 5-min grace, then sent.
+      ✅ 2026-08-24 + 2026-08-25. ⚠️ Same rail caveat. The `order.shipment.created` half (tracking
+      upgraded **in place**, PR #411 design note) is NOT verifiable on a demo store — the label flow
       never emits the event and Dev Company assigns no tracking (`SALLA_TEST_PLAN.md`
       2026-08-25 results); pinned by unit tests, live pass deferred to the first
       real-courier store.
+
+> ⛔⭐ **Both order-notification rows above were proved against the Vonage SMS rail, retired
+> 2026-09-03 by D-123 / PR #1042. Do not read their ✅ as a green delivery gate.**
+> What still holds is the half those runs actually exercised on the Salla side and that #1042 did
+> not touch: `buildSallaOrderEvent` (`backend/src/controllers/salla.ts`) — one event per order, the
+> `salla:order_shipped:<order_id>` dedup key, the 5-minute `SHIPPED_NO_TRACKING_GRACE_MS` hold, and
+> the in-place tracking upgrade. That logic is rail-agnostic and unchanged.
+> What is **no longer proved** is delivery. WhatsApp is now the only customer channel:
+> `customerNotifications.ts` throws `channel_unsupported` on any row not on `whatsapp`, and a
+> WhatsApp send needs a linked number **and** a Meta-approved template on that workspace. The
+> review workspace has neither, so an end-to-end order notification is **not demonstrable on the
+> review store** before submitting.
+> Consequence: this is **not** a listing blocker. The only brief bullet that would have promised
+> order notifications — «تأكيد الطلبات وتذكير العملاء بالعربات المتروكة (قريباً)» — is already one
+> of the two `PORTAL_FIELD_MAP.md` §3 deletes, so nothing in the pasted copy claims it, and the
+> reviewer's Service Trial script never reaches this path. It IS a runbook honesty fix: re-run both
+> rows on the WhatsApp rail against the first real merchant store, not before.
 - [x] **`track_shipment` against a real shipped order** — ✅ PASSED 2026-08-24
       (see `SALLA_TEST_PLAN.md` 3.8): the shipments call returned 200
       with a parseable envelope; reply carried the courier (no tracking on the demo
