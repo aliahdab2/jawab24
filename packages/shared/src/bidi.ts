@@ -82,7 +82,7 @@ const NUMERIC_TOKEN = new RegExp(
 const FRAGILE = /[+\-%$\u20AC\u00A3\u00A5\u20AA\u20BA\uFDFC\u066A]/;
 
 /** Any strong right-to-left letter — Arabic, Hebrew, Syriac, Thaana and their presentation forms. */
-const RTL_LETTER =
+export const RTL_LETTER =
     /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0780-\u07BF\u0860-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
 
 /**
@@ -132,6 +132,33 @@ function isolateSegment(segment: string): string {
 }
 
 /**
+ * Apply `isolate` to every part of `text` that is NOT a URL or an email address,
+ * handing the protected runs back byte-identical. See `PROTECTED_RUN` for why a
+ * mark inside a link is not a cosmetic problem: it travels with a copy-paste and
+ * breaks the link, and it visibly reorders the run on screen.
+ *
+ * ⭐ EVERY isolator that inserts marks into a delivered reply must go through
+ * this — `isolateNumericTokens` below and `isolateKnownPhones` (`phoneBidi.ts`).
+ * Shared rather than duplicated because the second isolator originally shipped
+ * without the guard and spliced an isolate into the middle of a merchant's own
+ * `https://wa.me/+963…` line, which is a dead deep link on the exact contact
+ * channel the reply was published to help with.
+ */
+export function isolateOutsideProtectedRuns(
+    text: string,
+    isolate: (segment: string) => string,
+): string {
+    let out = '';
+    let cursor = 0;
+    for (const match of text.matchAll(PROTECTED_RUN)) {
+        const start = match.index ?? 0;
+        out += isolate(text.slice(cursor, start)) + match[0];
+        cursor = start + match[0].length;
+    }
+    return out + isolate(text.slice(cursor));
+}
+
+/**
  * Wrap every direction-fragile numeric token in `text` in an LRI…PDI isolate, so
  * signs and separators render on the side they were written on.
  *
@@ -141,12 +168,5 @@ function isolateSegment(segment: string): string {
  */
 export function isolateNumericTokens(text: string): string {
     if (!text || !RTL_LETTER.test(text)) return text;
-    let out = '';
-    let cursor = 0;
-    for (const match of text.matchAll(PROTECTED_RUN)) {
-        const start = match.index ?? 0;
-        out += isolateSegment(text.slice(cursor, start)) + match[0];
-        cursor = start + match[0].length;
-    }
-    return out + isolateSegment(text.slice(cursor));
+    return isolateOutsideProtectedRuns(text, isolateSegment);
 }

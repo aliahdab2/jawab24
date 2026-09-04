@@ -22,6 +22,7 @@
  */
 import { stripMarkdownLinks } from './markdownLinks';
 import { isolateNumericTokens } from './bidi';
+import { isolateKnownPhones } from './phoneBidi';
 
 export type ReplyRenderTarget = 'plain' | 'whatsapp';
 
@@ -31,7 +32,11 @@ const STRIKE_RE = /~~([^~\n]+?)~~/g;
 /** A markdown heading: 1–6 `#` at line start followed by a space. */
 const HEADING_RE = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm;
 
-export function renderReplyForChannel(text: string, target: ReplyRenderTarget): string {
+export function renderReplyForChannel(
+    text: string,
+    target: ReplyRenderTarget,
+    knownPhones?: string[],
+): string {
     if (!text) return text;
     let out = stripMarkdownLinks(text);
     if (target === 'whatsapp') {
@@ -47,6 +52,11 @@ export function renderReplyForChannel(text: string, target: ReplyRenderTarget): 
             .replace(ITALIC_RE, '$1')
             .replace(STRIKE_RE, '$1');
     }
+    // A merchant's OWN phone number, written in spaced groups, paints its groups
+    // right-to-left in Arabic — `+46 70 022 47 20` → `20 47 022 70 46+`, unusable.
+    // Isolate each of the merchant's lines FIRST (matched by digits), so the next
+    // step sees them already fixed and does not double-wrap. See `phoneBidi.ts`.
+    if (knownPhones && knownPhones.length > 0) out = isolateKnownPhones(out, knownPhones);
     // Last, so it measures the text as sent: no channel renders markdown, but
     // every one of them hands the result to a bidi layout engine, and an Arabic
     // reply quoting `+963…`, `75$` or `20%` is displayed with the sign on the

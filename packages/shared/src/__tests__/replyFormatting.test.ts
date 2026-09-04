@@ -41,4 +41,22 @@ describe('renderReplyForChannel', () => {
     it('a heading marker mid-line is not a heading', () => {
         expect(renderReplyForChannel('رقم الطلب #1234 جاهز', 'plain')).toBe('رقم الطلب #1234 جاهز');
     });
+
+    it('isolates a merchant phone as ONE unit — not the "+46"-only fragment isolateNumericTokens would take', () => {
+        const plain = 'تواصل معنا على +46 70 022 47 20 مباشرة';
+        const want = `تواصل معنا على ${LRI}+46 70 022 47 20${PDI} مباشرة`;
+        expect(renderReplyForChannel(plain, 'plain', ['+46 70 022 47 20'])).toBe(want);
+        // Without the known-phones argument, only isolateNumericTokens runs and it
+        // takes just the "+46" fragment — the whole-number wrap is what we added.
+        expect(renderReplyForChannel(plain, 'plain')).toBe(
+            `تواصل معنا على ${LRI}+46${PDI} 70 022 47 20 مباشرة`,
+        );
+    });
+
+    it('still repairs a NON-phone fragile token beside the isolated phone (no double-wrap)', () => {
+        const plain = 'رقمنا 0993 458 423 والتوصيل 3-5 أيام';
+        expect(renderReplyForChannel(plain, 'plain', ['0993 458 423'])).toBe(
+            `رقمنا ${LRI}0993 458 423${PDI} والتوصيل ${LRI}3-5${PDI} أيام`,
+        );
+    });
 });

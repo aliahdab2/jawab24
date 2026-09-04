@@ -251,6 +251,45 @@ export function extractPhoneFromText(text: string, opts?: { defaultCountry?: str
 }
 
 /**
+ * Phone-shaped spans WITH their positions in the RAW text — for a caller that must
+ * locate the number to wrap it in place (RTL bidi isolation), not merely read it.
+ *
+ * Unlike `extractPhones`, this runs the permissive regexes on the text UNCHANGED
+ * (no `preNormalizeForPhones`), because that step strips bidi marks and rewrites
+ * `00→+`, both of which shift offsets so a position could no longer point at the
+ * original characters. Deciding whether a span is a real, wanted number is the
+ * caller's job (e.g. `samePhoneNumber` against the merchant's own lines) — this
+ * only bounds candidates to phone-plausible digit counts and drops overlaps so no
+ * character is wrapped twice. ASCII digits only, which is what the regexes match
+ * and what merchants store; an Arabic-Indic-digit number is left for the caller's
+ * fallback, exactly as elsewhere.
+ */
+export function findPhoneSpans(text: string): { start: number; end: number; raw: string }[] {
+  const spans: { start: number; end: number; raw: string }[] = [];
+  for (const base of [CONTIGUOUS_PHONE_REGEX, GROUPED_PHONE_REGEX]) {
+    // Own instance so the shared `/g` lastIndex is never carried between calls.
+    const re = new RegExp(base.source, base.flags);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const d = digitCount(m[0]);
+      if (d < FALLBACK_DIGIT_MIN || d > DIGIT_MAX) continue;
+      spans.push({ start: m.index, end: m.index + m[0].length, raw: m[0] });
+    }
+  }
+  // Earliest first, longer first at a tie; then drop anything overlapping an
+  // already-accepted span so the two regexes never wrap the same number twice.
+  spans.sort((a, b) => a.start - b.start || b.end - a.end);
+  const out: typeof spans = [];
+  let lastEnd = -1;
+  for (const s of spans) {
+    if (s.start < lastEnd) continue;
+    out.push(s);
+    lastEnd = s.end;
+  }
+  return out;
+}
+
+/**
  * The last-9-significant-digit tail that identifies a phone line across the
  * `+CC` / leading-`0` / spaced representations (national numbers run ~9–10
  * significant digits). Empty string when the run is too short to identify one.

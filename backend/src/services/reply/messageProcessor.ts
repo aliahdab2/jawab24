@@ -27,7 +27,7 @@ import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import { instagramCredentialOf } from '../instagramCredential';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
-import { resolveEffectiveReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn, knownContactPhones } from '@jawab24/shared';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { isPunctuationOnly } from '../../utils/commentText';
@@ -874,7 +874,12 @@ export class MessageProcessor {
             // 12d. Render the canonical reply for THIS channel (markdown → what it
             // can display), before the length cap so the cap measures what is sent.
             // Persisted as-is at step 15: the stored row is what the customer saw.
-            replyText = adapter.renderReply(replyText);
+            // Pass the merchant's own numbers so a spaced phone the reply quotes is
+            // bidi-isolated in place (Arabic RTL would otherwise paint it backwards).
+            replyText = adapter.renderReply(
+                replyText,
+                knownContactPhones(page.businessProfile as Parameters<typeof knownContactPhones>[0]),
+            );
 
             // 12e. Platform max message length (Facebook=2000, Instagram=1000).
             const maxReplyChars = adapter.maxReplyLength ?? 2000;

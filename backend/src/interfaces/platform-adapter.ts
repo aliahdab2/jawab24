@@ -126,8 +126,11 @@ export interface MessagePlatformAdapter {
      * before `sendReply` and persists the result, so the stored row is what the
      * customer saw. Messenger/Instagram render nothing → plain; WhatsApp has its
      * own `*bold*` markup → translated. See `renderReplyForChannel`.
+     *
+     * `knownPhones` are the merchant's own contact lines; each is isolated in
+     * place so a spaced number does not paint its groups backwards in Arabic RTL.
      */
-    renderReply(text: string): string;
+    renderReply(text: string, knownPhones?: string[]): string;
 
     sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined>;
 
