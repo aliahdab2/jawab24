@@ -264,7 +264,13 @@ export const CommentCard = React.memo(function CommentCard({
                  {/* Bubble */}
                  <div className="relative">
                     <div className="px-4 py-2.5 reply-bubble rounded-2xl rounded-se-sm text-sm leading-relaxed border shadow-sm">
-                       <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")}>
+                       {/* dir="auto" — the SAME treatment the incoming comment gets above,
+                           and what CommentDetailModal already does for this very field. It
+                           was missing only here, so an English reply inside the Arabic
+                           dashboard took the page's RTL base direction and painted its
+                           trailing punctuation on the wrong side («…for you» rendered
+                           «.location and we can check options for you»). */}
+                       <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
                           {comment.replyText}
                        </p>
                        <div className="mt-1 flex justify-end">

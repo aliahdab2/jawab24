@@ -38,9 +38,11 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { useIsDemoUser } from '@/features/demo';
 import { computeFactCoverage } from '@/utils/businessCoverage';
+import { formatTimestampDateTime } from '@/utils/dateUtils';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 // Direct import, NOT the '@/hooks' barrel — public page.
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
@@ -202,6 +204,7 @@ function ConnectedStoreCard({
 }) {
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
+  const { intlLocale } = useLanguage();
   const { canEdit } = useWorkspaceRole();
   const connectAvailable = useConnectAvailable(platform.id);
   const isDemoUser = useIsDemoUser();
@@ -364,9 +367,25 @@ function ConnectedStoreCard({
         <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.storeMetaClass)}>
           <div>
             <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
+            {/* ⭐ <bdi> around the timestamp, and the APP's locale — not `undefined`.
+                Two defects lived in one line, both visible on the Arabic store card:
+                (a) `toLocaleString(undefined, …)` formats in the BROWSER's locale, so an
+                    Arabic dashboard on an English-locale device printed «4 Sept 2026, 00:22»;
+                (b) a formatted date-time is several runs joined by neutrals («4», «Sept»,
+                    «2026», «00:22»), and in an RTL paragraph those neutrals take the RTL
+                    level — so the runs painted right-to-left and the label's colon landed on
+                    the wrong side. Same class as the Business facts list, same fix, and the
+                    full rationale is written out at BusinessFactRows.tsx:205. Do not
+                    "simplify" the <bdi> back to a bare span or drop the locale argument.
+                The formatting itself belongs to dateUtils — it carries the null/NaN
+                fallback this line used to lack, so a malformed timestamp falls back to
+                t('never') («لم يتم بعد») rather than rendering "Invalid Date".
+                ⚠️ jsdom does no bidi layout, so a unit test can assert the element but never
+                the painted order — that needs real Chrome. */}
             <p className="text-xs text-muted-foreground">
               {t('products')}: {store.productCount} &middot;{' '}
-              {t('lastSync')}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t('never')}
+              {t('lastSync')}:{' '}
+              <bdi>{formatTimestampDateTime(store.lastSyncAt, intlLocale, t('never'))}</bdi>
             </p>
           </div>
           <div className="flex gap-2">
@@ -669,18 +688,16 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 const IntegrationsPage: NextPageWithLayout = () => {
   const tInt = useTranslations('integrations');
   const router = useRouter();
-  const { isAuthenticated, user, _hasHydrated } = useAuthStore();
-  const isAdmin = !!user?.isAdmin;
+  const { isAuthenticated } = useAuthStore();
 
-  // Page is admin-only while we finish public roll-out. Non-admins get
-  // redirected silently to the dashboard. Wait for store hydration before
-  // deciding so we don't bounce a real admin on first paint.
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (isAuthenticated && !isAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [_hasHydrated, isAuthenticated, isAdmin, router]);
+  // GA for all merchants (owner ruling 2026-09-04). This page used to read
+  // `user.isAdmin` and silently `router.replace('/dashboard')` every non-admin
+  // while the public roll-out finished. The gate came off because the Salla App
+  // Store listing's first gallery image IS this screen, and a listing may not
+  // advertise a page the merchant who installs it cannot open. The matching nav
+  // gate in Sidebar.tsx went with it, so the entry and the route agree.
+  // `user` and `_hasHydrated` were read ONLY by that guard and are gone with it —
+  // the page's own data load keys off `isAuthenticated` below.
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
   const [connectAvailability, setConnectAvailability] = useState<Partial<Record<PlatformId, boolean>>>({});

@@ -514,7 +514,7 @@ interface ZidOrderPayload {
  *   status codes (new/preparing/ready/canceled) intentionally send nothing.
  * No shipped-without-tracking grace here (Salla's SHIPPED_NO_TRACKING_GRACE_MS):
  * Zid has no separate shipment event to upgrade the row later, so waiting would
- * only delay the SMS.
+ * only delay the notification.
  */
 function buildZidOrderEvent(storeId: string, event: string, body: ZidWebhookBody): OrderEvent | null {
     // Envelope unconfirmed — the order may arrive under data, order, or at the root.

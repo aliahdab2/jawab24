@@ -162,14 +162,20 @@ Start free today — no credit card required. Let Jawab24 reply and persuade, so
 
 Screenshot count [TBD — verify Salla Partners spec sheet]. Draft list assumes 4–6:
 
-| # | Screen | What it shows | Arabic copy overlay | Notes |
-|---|---|---|---|---|
-| 1 | `/integrations` connected state | Connected Salla store card with green "متصل" badge, page-link chips, product count | "اربط متجرك في سلة بصفحاتك في دقيقة" | Use a fake-but-realistic store domain like `mystore.salla.sa` |
-| 2 | `/admin/playground` with Salla product context | Real Salla product question + AI reply quoting actual price | "الذكاء الاصطناعي يقرأ منتجاتك مباشرة" | Use a real catalog from a dev store; show price + currency |
-| 3 | Comments page with auto-reply on a real FB post | Customer comment in Arabic + AI reply showing product detail | "يرد على تعليقات فيسبوك وإنستغرام تلقائياً" | Anonymize commenter name |
-| 4 | Settings — knowledge base | KB editor showing Arabic store info | "يفهم سياساتك ويستخدمها في الردود" | |
-| 5 | Settings — auto-reply mode toggle | The 3 reply modes (public, DM, both) | "اختر طريقة الرد المناسبة لك" | |
-| 6 | Mobile view of comments on the iOS app | The Capacitor mobile app showing the same comment + reply | "تابع الردود من جوالك" | Optional — only if listing supports 6 |
+> ⭐ **Rows 1–3 are SHOT and shipped** at `docs/store-listing/salla/gallery-{1,2,3}.png`
+> (re-shot 2026-09-04). The «Arabic copy overlay» column below records what was
+> APPROVED; the «As shipped» column records what is actually on the PNG, because the
+> two drifted and the divergence needs a sign-off, not a silent edit. Rows 4–6 were
+> never shot — the listing takes exactly 3 gallery images.
+
+| # | Screen | What it shows | Arabic copy overlay (approved) | As shipped 2026-09-04 | Notes |
+|---|---|---|---|---|---|
+| 1 | `/integrations` connected state | Connected Salla store card with green "متصل" badge, page-link chips, product count | "اربط متجرك في سلة بصفحاتك في دقيقة" | ⚠️ "اربط متجرك في سلة بواتساب وفيسبوك وإنستغرام في دقيقة" — names the three channels | ⛔ `/integrations` is ADMIN-ONLY in production, so this shot shows a screen a Salla merchant cannot open. Needs the gate dropped or a re-shoot — see `docs/store-listing/salla/README.md` |
+| 2 | `/admin/playground` with Salla product context | Real Salla product question + AI reply quoting actual price | "الذكاء الاصطناعي يقرأ منتجاتك مباشرة" | ⚠️ "يقرأ منتجاتك وأسعارك من سلة، ويجيب عملاءك على واتساب وفيسبوك وإنستغرام" | Shot on the in-app «اختبار الرد الذكي» modal, not `/admin/playground`. Real catalog, real price |
+| 3 | Comments page with auto-reply on a real FB post | Customer comment **in Arabic** + AI reply showing product detail | "يرد على تعليقات فيسبوك وإنستغرام تلقائياً" | ✅ caption matches | ✅ Top row now leads with an Arabic pair quoting 450/750 ريال, beside an English pair. Enforced: `sources/capture.js` fails the shoot if the top row carries no Arabic conversation |
+| 4 | Settings — knowledge base | KB editor showing Arabic store info | "يفهم سياساتك ويستخدمها في الردود" | — not shot |  |
+| 5 | Settings — auto-reply mode toggle | The 3 reply modes (public, DM, both) | "اختر طريقة الرد المناسبة لك" | — not shot |  |
+| 6 | Mobile view of comments on the iOS app | The Capacitor mobile app showing the same comment + reply | "تابع الردود من جوالك" | — not shot | Optional — only if listing supports 6 |
 
 **Production rules:**
 - **Synthetic conversations only.** Never screenshot a real customer's Facebook DM or comment, even anonymized. Set up two test accounts and stage the conversation. Real-customer screen-grabs raise Meta ToS and Saudi PDPL exposure.
@@ -193,8 +199,8 @@ Salla App Store listings benefit from a short demo video. Draft script:
 | 1 | 0:00–0:08 | Stress montage — phone buzzing, merchant reading message after message | "كل يوم، نفس الأسئلة..." |
 | 2 | 0:08–0:18 | **`/ar/integrations`** — click Connect Salla, OAuth screen, 3-step onboarding wizard | "اربط متجرك في سلة بـ Jawab24 في دقيقة." |
 | 3 | 0:18–0:32 | DM thread between two **test accounts** (synthetic conversation, not a real customer) — Arabic question about a real product → AI reply with correct price + product link | "الذكاء الاصطناعي يقرأ متجرك ويرد بأسعار ومنتجات حقيقية." |
-| 4 | 0:32–0:48 | Comments page showing AI reply on a Facebook post belonging to the test page, then a DM thread (both synthetic) | "يرد على التعليقات والرسائل في فيسبوك وإنستغرام، تلقائياً." |
-| 5 | 0:48–0:60 | Knowledge base editor briefly + Settings → reply mode toggle, both at `/ar/...` paths | "تحكم كامل: متى يرد، وكيف يرد." |
+| 4 | 0:32–0:48 | Comments page showing AI reply on a Facebook post belonging to the test page, then a DM thread (both synthetic) | "يرد على التعليقات والرسائل في فيسبوك وإنستغرام، تلقائياً." |  |  |
+| 5 | 0:48–0:60 | Knowledge base editor briefly + Settings → reply mode toggle, both at `/ar/...` paths | "تحكم كامل: متى يرد، وكيف يرد." |  |  |
 | 6 | 0:60–0:72 | Mobile view on iPhone — same `/ar/...` flow on the road | "تابع كل شيء من جوالك." |
 | 7 | 0:72–0:85 | Hero screen + URL `jawab24.com` + "ابدأ مجاناً" CTA | "Jawab24 — جوابك الذكي على فيسبوك وإنستغرام، من متجرك في سلة." |
 

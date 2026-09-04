@@ -309,6 +309,12 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion, replyMode 
                   )}
 
                   <div
+                    /* Stable hook for automation that must read the REPLY and not the
+                       latency badge beside it — the listing-gallery capture script
+                       (docs/store-listing/salla/sources/capture.js) refuses to shoot a
+                       spinner, a quota wall or a refusal, and needs to tell the bubble
+                       apart from the nudge, which carries the same classes. */
+                    data-testid={`test-reply-${msg.role}-bubble`}
                     className={clsx(
                       'max-w-[90%] sm:max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm',
                       msg.role === 'user'

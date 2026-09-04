@@ -33,7 +33,7 @@ export function startCustomerNotificationWorker(): Worker {
         {
             connection,
             concurrency: 10,
-            limiter: { max: 50, duration: 60_000 }, // max 50 SMS/min — retry policy lives on the Queue (customerNotificationQueue.ts)
+            limiter: { max: 50, duration: 60_000 }, // max 50 sends/min — retry policy lives on the Queue (customerNotificationQueue.ts)
         },
     );
 

@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { VersionStamp } from './VersionStamp';
 
 
 interface Section {
@@ -120,13 +121,7 @@ export function LegalPageLayout({
           </div>
 
           {/* Version Info */}
-          <div className="mt-12 pt-8 border-t border-theme-border text-center">
-            <p className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} Jawab24 • v{process.env.NEXT_PUBLIC_BUILD_TIME 
-                ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleDateString() 
-                : 'Dev'}
-            </p>
-          </div>
+          <VersionStamp />
         </div>
 
         {/* Fixed bottom safe area background - matches dark page background */}

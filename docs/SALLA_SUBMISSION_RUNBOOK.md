@@ -194,13 +194,21 @@ submission happens on the production app.
       `SALLA_EASY_MODE_CLAIM_ENABLED`.
 - [ ] **Marketing sign-off** on listing copy §1–2 (`.planning/SALLA_LISTING_BRIEF.md` — honesty
       pass done 2026-07-05; sales-rep frame per D-014, no transact verbs, no "AI agent").
-- [ ] **Designer assets produced** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
-      exactly **3 App Gallery images @ 1366×768**, exactly **3 Key Benefits images @ 1600×1600**
-      (each with title + description), **icon 512×512** PNG/JPEG ≤1MB (symbol-only, margin),
-      optional **YouTube link ≤2 min**. Include a WhatsApp screenshot — the copy claims it.
-      **Usable drafts EXIST at `docs/store-listing/salla/`** (real AR app UI, verified specs,
-      AR/EN benefit copy in `benefits.md`) — founder review pending; a designer pass is
-      optional polish, not a blocker.
+- [x] **Assets RE-SHOT and review-corrected 2026-09-04** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
+      3 App Gallery @ 1366×768, 3 Key Benefits @ 1600×1600, icon 512×512 — all at
+      `docs/store-listing/salla/`, all real Arabic app UI, shot as a plain merchant account.
+      The re-shoot replaced the dev-fixture names («Test User», «Test Page», «متجر تجريبي»)
+      with one realistic Salla merchant per the owner's 2026-09-03 decision.
+      A review of the first shoot found three problems, all now closed and all now
+      enforced by `sources/capture.js` rather than by care: gallery-1 showed the
+      admin-only `/integrations` (**the gate was dropped**, owner ruling 2026-09-04, so
+      merchants see it too); gallery-3's crop was English-only because the demo comment
+      fixtures were randomly ordered (**fixed at the root** — explicit `minutesAgo`, Arabic
+      pairs newest); gallery-2's reply was whatever the model happened to say (**now gated**
+      on price, no raw URLs, and ≤3500 ms). Details in
+      `docs/store-listing/salla/README.md`. ⏭ Founder eyeball still owed.
+      ⏭ Still open: the optional **YouTube link ≤2 min** (only if the wizard enforces the
+      Educational Video field — test that first, see Phase 2 step 1).
 - [x] **Support inbox live** — `support@jawab24.com`, settled and confirmed 2026-09-03 (owner).
       Verified against live DNS: Namecheap forwarding MX (`eforward{1..5}.registrar-servers.com`)
       + matching SPF; the alias forwards to a monitored inbox. ⚠️ The "MX absent" line in the
@@ -286,6 +294,8 @@ submission happens on the production app.
 - [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
+      (all three images are READY — `docs/store-listing/salla/gallery-{1,2,3}.png`, re-shot
+      and review-corrected 2026-09-04; what is left is the portal sitting that uploads them)
 - [ ] A real Salla store connected end-to-end — install + token push + claim ✅ 2026-08-23 (demo
       store, D-093) — **but the store row was later DELETED (discovered 2026-08-30) and the 08-23
       21:30 re-push expired unclaimed.** Rebuild: *Reauthorize App* in the demo-store admin →
@@ -351,14 +361,32 @@ Summary of the gates:
 - [ ] Install onto a real store → token push → pending install → claim binds by owner-email
       match → products sync.
 - [ ] Test reply quotes a real product name **and price** from the live catalog.
-- [x] `order.created` → **exactly one** customer SMS. ✅ 2026-08-25 (confirmed admin order
-      `#279682567`; a Draft fires nothing — the Confirm dialog is what creates the order).
-- [x] `order.status.updated`(shipped) → one SMS row held for the 5-min grace, then sent.
-      ✅ 2026-08-24 + 2026-08-25. ⚠️ The `order.shipment.created` half (tracking upgraded
-      **in place**, PR #411 design note) is NOT verifiable on a demo store — the label flow
+- [ ] `order.created` → **exactly one** customer notification row. ✅ 2026-08-25 (confirmed admin
+      order `#279682567`; a Draft fires nothing — the Confirm dialog is what creates the order).
+      ⚠️ **Proved on the SMS rail, which no longer exists — see the note below.**
+- [ ] `order.status.updated`(shipped) → one row held for the 5-min grace, then sent.
+      ✅ 2026-08-24 + 2026-08-25. ⚠️ Same rail caveat. The `order.shipment.created` half (tracking
+      upgraded **in place**, PR #411 design note) is NOT verifiable on a demo store — the label flow
       never emits the event and Dev Company assigns no tracking (`SALLA_TEST_PLAN.md`
       2026-08-25 results); pinned by unit tests, live pass deferred to the first
       real-courier store.
+
+> ⛔⭐ **Both order-notification rows above were proved against the Vonage SMS rail, retired
+> 2026-09-03 by D-123 / PR #1042. Do not read their ✅ as a green delivery gate.**
+> What still holds is the half those runs actually exercised on the Salla side and that #1042 did
+> not touch: `buildSallaOrderEvent` (`backend/src/controllers/salla.ts`) — one event per order, the
+> `salla:order_shipped:<order_id>` dedup key, the 5-minute `SHIPPED_NO_TRACKING_GRACE_MS` hold, and
+> the in-place tracking upgrade. That logic is rail-agnostic and unchanged.
+> What is **no longer proved** is delivery. WhatsApp is now the only customer channel:
+> `customerNotifications.ts` throws `channel_unsupported` on any row not on `whatsapp`, and a
+> WhatsApp send needs a linked number **and** a Meta-approved template on that workspace. The
+> review workspace has neither, so an end-to-end order notification is **not demonstrable on the
+> review store** before submitting.
+> Consequence: this is **not** a listing blocker. The only brief bullet that would have promised
+> order notifications — «تأكيد الطلبات وتذكير العملاء بالعربات المتروكة (قريباً)» — is already one
+> of the two `PORTAL_FIELD_MAP.md` §3 deletes, so nothing in the pasted copy claims it, and the
+> reviewer's Service Trial script never reaches this path. It IS a runbook honesty fix: re-run both
+> rows on the WhatsApp rail against the first real merchant store, not before.
 - [x] **`track_shipment` against a real shipped order** — ✅ PASSED 2026-08-24
       (see `SALLA_TEST_PLAN.md` 3.8): the shipments call returned 200
       with a parseable envelope; reply carried the courier (no tracking on the demo

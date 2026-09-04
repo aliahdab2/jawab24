@@ -22,8 +22,8 @@ export interface OrderEvent {
     /** Cart-recovery link for abandoned_cart nudges — rendered as {checkout_url}. */
     checkoutUrl?: string;
     /** Minimum delay before sending (ms). Effective delay = max(template delay, this).
-     *  Used to hold a tracking-less shipped SMS briefly so a later shipment webhook
-     *  carrying the tracking number can upgrade it in place. */
+     *  Used to hold a tracking-less shipped notification briefly so a later shipment
+     *  webhook carrying the tracking number can upgrade it in place. */
     minDelayMs?: number;
     /** On dedup conflict, upgrade the still-pending row's rendered message instead of
      *  skipping — lets a tracking-bearing shipment webhook enrich an earlier row. */
@@ -88,7 +88,7 @@ export async function scheduleOrderNotifications(event: OrderEvent): Promise<voi
     // never reach them. Runs regardless of whether the order_confirmed template is
     // enabled (schedule() below may no-op on a disabled template, but the purchase
     // still invalidates the nudge), and best-effort so a cancel failure can never
-    // cost the confirmation SMS itself.
+    // cost the confirmation notification itself.
     if (type === 'order_confirmed') {
         try {
             await customerNotificationService.cancel(storeId, 'abandoned_cart', customerPhone);

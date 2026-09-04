@@ -416,9 +416,11 @@ interface SallaShipmentData {
     ship_to?: { name?: string; phone?: string };
 }
 
-// order.status.updated (slug 'shipped') carries no tracking number. Hold the shipped SMS
-// briefly so a following order.shipment.created can upgrade the row in place with tracking,
-// while still guaranteeing a single SMS for merchants whose flow never fires shipment.created.
+// order.status.updated (slug 'shipped') carries no tracking number. Hold the shipped
+// notification briefly so a following order.shipment.created can upgrade the row in place with
+// tracking, while still guaranteeing a single notification for merchants whose flow never fires
+// shipment.created. (Channel-neutral: the row is delivered over WhatsApp today — the SMS rail was
+// retired with the Vonage provider, D-123 — and the column is the seat for a future rail.)
 const SHIPPED_NO_TRACKING_GRACE_MS = 5 * 60 * 1000;
 
 /** Build a full international phone from Salla's split `mobile` + `mobile_code`.
@@ -500,7 +502,7 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
     // `order.updated` fires alongside `order.status.updated` on every status change —
     // notifications are driven solely off `order.status.updated` to avoid double-sending.
     if (isStatusUpdate && slug === 'shipped') {
-        // The status-update payload never carries tracking. Hold the SMS briefly
+        // The status-update payload never carries tracking. Hold the notification briefly
         // (SHIPPED_NO_TRACKING_GRACE_MS) so a following order.shipment.created can upgrade
         // this row with the tracking number; if none arrives, it still sends after the grace.
         return orderShippedEvent('salla', storeId, {

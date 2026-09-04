@@ -129,11 +129,44 @@ export function formatTimestampDate(
     iso: string | null | undefined,
     intlLocale: string,
     fallback = '—',
+    timeZone?: string,
 ): string {
     if (!iso) return fallback;
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return fallback;
-    return d.toLocaleDateString(intlLocale, { year: 'numeric', month: 'short', day: 'numeric' });
+    // `timeZone` defaults to the viewer's, which is what a merchant-facing date
+    // wants. Pass 'UTC' for a date that is prerendered into static HTML — the
+    // build server and the visitor's browser are in different zones, and a date
+    // that formats differently in each is a hydration mismatch.
+    return d.toLocaleDateString(intlLocale, { year: 'numeric', month: 'short', day: 'numeric', timeZone });
+}
+
+/**
+ * A full ISO TIMESTAMP as a short date AND time ("4 سبتمبر 2026، 4:28 ص").
+ *
+ * The date-plus-time sibling of formatTimestampDate above, with the same
+ * null/NaN posture: a malformed timestamp returns `fallback`, never the string
+ * "Invalid Date". Used for "last synced at"-style meta lines.
+ *
+ * ⚠️ Both this and formatTimestampDate take an EXPLICIT `intlLocale` (from
+ * `useLanguage()`), never `undefined`. `toLocaleString(undefined, …)` formats in
+ * the BROWSER's locale, so an Arabic dashboard on an English-locale device
+ * prints "4 Sept 2026, 00:22". The app locale is the only correct answer.
+ *
+ * ⚠️ The RESULT is several runs joined by neutrals ("4", "سبتمبر", "2026",
+ * "4:28"), so a caller rendering it inside an RTL paragraph must isolate it in
+ * a <bdi> or the runs paint right-to-left. See BusinessFactRows.tsx:205 for the
+ * full rationale; pins live in __tests__/styles/localeDateFormatting.test.ts.
+ */
+export function formatTimestampDateTime(
+    iso: string | Date | null | undefined,
+    intlLocale: string,
+    fallback = '—',
+): string {
+    if (!iso) return fallback;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return fallback;
+    return d.toLocaleString(intlLocale, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /**

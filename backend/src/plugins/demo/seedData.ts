@@ -1304,7 +1304,7 @@ const DEMO_POSTS = [
     },
 ];
 
-const DEMO_COMMENTS: Array<{
+export const DEMO_COMMENTS: Array<{
     facebookCommentId: string;
     message: string;
     fromId: string;
@@ -1317,10 +1317,26 @@ const DEMO_COMMENTS: Array<{
     flagReason?: string;
     flagMeta?: import('@jawab24/shared').FlagMeta | null;
     resolved?: boolean;
+    /**
+     * Age of the comment, in minutes. EXPLICIT, not random.
+     *
+     * This used to be `Date.now() - Math.random() * 3 days` at both insert sites,
+     * which made the demo comment list arrive in a DIFFERENT ORDER on every seed —
+     * the page sorts newest-first, so which comments a merchant (or a screenshot)
+     * saw at the top was a coin flip. That is what put two English conversations
+     * at the top of the Salla listing's gallery-3, under an Arabic caption, on the
+     * 2026-09-04 shoot. `DEMO_MESSAGES` and the demo notifications already carried
+     * an explicit `minutesAgo`; comments were the outlier.
+     *
+     * Order matters and is deliberate: Arabic-first, because the demo and the
+     * store listings are Arabic-first.
+     */
+    minutesAgo: number;
 }> = [
     // ── Institute comments (posts 0, 1) ──
     {
         facebookCommentId: 'demo_comment_1',
+        minutesAgo: 235,
         message: 'كم رسوم دورة الإنجليزي؟',
         fromId: 'user_1',
         fromName: 'أحمد محمد',
@@ -1331,6 +1347,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_2',
+        minutesAgo: 330,
         message: 'Are the classes in-person or online?',
         fromId: 'user_2',
         fromName: 'Laila Hassan',
@@ -1341,6 +1358,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_3',
+        minutesAgo: 425,
         message: 'كم مدة دورة IELTS؟',
         fromId: 'user_3',
         fromName: 'خالد عبدالله',
@@ -1352,6 +1370,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Needs human attention — flagged by keyword + backend flag
         facebookCommentId: 'demo_comment_4',
+        minutesAgo: 520,
         message: 'عندي مشكلة في التسجيل، أحتاج مساعدة من موظف',
         fromId: 'user_4',
         fromName: 'سارة أحمد',
@@ -1365,6 +1384,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied — shows in "Needs Action"
         facebookCommentId: 'demo_comment_11',
+        minutesAgo: 615,
         message: 'Do you have evening classes for working professionals?',
         fromId: 'user_11',
         fromName: 'David Miller',
@@ -1376,6 +1396,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Resolved — was unreplied but user resolved it manually
         facebookCommentId: 'demo_comment_12',
+        minutesAgo: 710,
         message: 'شكراً، تواصلت معكم بالواتساب',
         fromId: 'user_12',
         fromName: 'هند العتيبي',
@@ -1389,6 +1410,7 @@ const DEMO_COMMENTS: Array<{
     // ── School comments (posts 2, 3) ──
     {
         facebookCommentId: 'demo_comment_5',
+        minutesAgo: 805,
         message: 'متى آخر موعد للتسجيل؟',
         fromId: 'user_5',
         fromName: 'محمد سعيد',
@@ -1399,6 +1421,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_6',
+        minutesAgo: 900,
         message: 'Do you offer school transport?',
         fromId: 'user_6',
         fromName: 'Jessica Brown',
@@ -1409,6 +1432,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_7',
+        minutesAgo: 995,
         message: 'كم رسوم المرحلة الابتدائية؟',
         fromId: 'user_7',
         fromName: 'عبدالله خالد',
@@ -1420,6 +1444,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Flagged — needs attention, SLA breach
         facebookCommentId: 'demo_comment_13',
+        minutesAgo: 1090,
         message: 'أبي أسجل بنتي بس ما أحد رد علي من أسبوع!',
         fromId: 'user_13',
         fromName: 'لينا القحطاني',
@@ -1434,6 +1459,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied on congrats post — can be resolved (no reply needed)
         facebookCommentId: 'demo_comment_14',
+        minutesAgo: 1185,
         message: 'Congratulations to all the top students! 🎉',
         fromId: 'user_14',
         fromName: 'Linda Parker',
@@ -1446,6 +1472,7 @@ const DEMO_COMMENTS: Array<{
     // ── Electronics store comments (posts 4, 5) ──
     {
         facebookCommentId: 'demo_comment_8',
+        minutesAgo: 1280,
         message: 'كم سعر آيفون 15؟',
         fromId: 'user_8',
         fromName: 'ريم عبدالرحمن',
@@ -1456,6 +1483,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_9',
+        minutesAgo: 1375,
         message: 'Is there a warranty?',
         fromId: 'user_9',
         fromName: 'Michael Scott',
@@ -1467,6 +1495,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied — shipping question
         facebookCommentId: 'demo_comment_10',
+        minutesAgo: 1470,
         message: 'هل توصلون للدمام؟',
         fromId: 'user_10',
         fromName: 'منى الحربي',
@@ -1478,6 +1507,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Flagged — complaint needs human attention
         facebookCommentId: 'demo_comment_15',
+        minutesAgo: 1565,
         message: 'طلبت جوال ووصلني مكسور! أبي شكوى رسمية',
         fromId: 'user_15',
         fromName: 'طلال المطيري',
@@ -1491,6 +1521,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Resolved — already handled via DM
         facebookCommentId: 'demo_comment_16',
+        minutesAgo: 1660,
         message: 'What is the best laptop for programming?',
         fromId: 'user_16',
         fromName: 'Kevin Lee',
@@ -1504,6 +1535,7 @@ const DEMO_COMMENTS: Array<{
     // ── Fashion store comments (posts 6, 7) ──
     {
         facebookCommentId: 'demo_comment_17',
+        minutesAgo: 45,
         message: 'كم سعر العباية السوداء؟',
         fromId: 'user_17',
         fromName: 'مها الشهري',
@@ -1514,6 +1546,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_18',
+        minutesAgo: 1755,
         message: 'Do you carry plus sizes?',
         fromId: 'user_18',
         fromName: 'Amelia Davis',
@@ -1524,6 +1557,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_19',
+        minutesAgo: 140,
         message: 'هل فيه توصيل للمدينة المنورة؟',
         fromId: 'user_19',
         fromName: 'رنا السلمي',
@@ -1535,6 +1569,7 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied — wants to exchange
         facebookCommentId: 'demo_comment_20',
+        minutesAgo: 1850,
         message: 'طلبت ثوب وجاني مقاس غلط، كيف أرجعه؟',
         fromId: 'user_20',
         fromName: 'بندر العتيبي',
@@ -1547,6 +1582,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_21',
+        minutesAgo: 1945,
         message: 'Love the collection! What is the best men\'s perfume you have?',
         fromId: 'user_21',
         fromName: 'Thomas White',
@@ -1559,6 +1595,7 @@ const DEMO_COMMENTS: Array<{
     // ── English comments (mixed across pages — showcases bilingual auto-detect) ──
     {
         facebookCommentId: 'demo_comment_22',
+        minutesAgo: 2040,
         message: 'How much is the IELTS course? And do you offer online classes?',
         fromId: 'user_22',
         fromName: 'Sarah Johnson',
@@ -1569,6 +1606,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_23',
+        minutesAgo: 2135,
         message: 'Do you ship internationally? I want to order the black abaya',
         fromId: 'user_23',
         fromName: 'Fatima Ali',
@@ -1579,6 +1617,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_24',
+        minutesAgo: 2230,
         message: 'What are your admission requirements for KG1?',
         fromId: 'user_24',
         fromName: 'Ahmed Hassan',
@@ -1589,6 +1628,7 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_25',
+        minutesAgo: 2325,
         message: 'Is the MacBook Air M3 available for pickup today?',
         fromId: 'user_25',
         fromName: 'Omar K.',
@@ -1601,6 +1641,14 @@ const DEMO_COMMENTS: Array<{
 
 // Derive detectedLanguage / replyLanguage once so both the create and refresh
 // paths insert identical rows (avoids drift between the two branches below).
+/**
+ * How long after a demo comment arrived we "replied" to it: 5-120 s, derived from
+ * the comment's own age rather than `Math.random()`, so two seeds of the same demo
+ * account produce the same data. Kept in the same 5-120 s band the random version
+ * used, because the demo's «رد خلال ثوانٍ» claim is read off these timestamps.
+ */
+const REPLY_DELAY_MS = (minutesAgo: number) => (5 + (minutesAgo % 116)) * 1000;
+
 const DEMO_COMMENTS_SEED = DEMO_COMMENTS.map((c) => ({
     ...c,
     detectedLanguage: langOf(c.message),
@@ -2585,7 +2633,7 @@ export async function seedDemoData(
         for (const commentData of DEMO_COMMENTS_SEED) {
             const post = refreshedPosts[commentData.postIndex];
             if (!post) continue;
-            const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
+            const commentCreatedTime = new Date(Date.now() - commentData.minutesAgo * 60 * 1000);
             await db.insert(comments).values({
                 postId: post.id,
                 workspaceId,
@@ -2602,9 +2650,14 @@ export async function seedDemoData(
                 flagReason: commentData.flagReason ?? null,
                 flagMeta: commentData.flagMeta ?? null,
                 resolved: commentData.resolved ?? false,
+                // BOTH timestamps, and this is not belt-and-braces: the inbox orders by
+                // `createdAt` (comments.ts → orderBy(desc(comments.createdAt))), while the
+                // card DISPLAYS `createdTime`. Setting only one produced a list whose order
+                // disagreed with the ages on its own cards — insertion order, reversed.
+                createdAt: commentCreatedTime,
                 createdTime: commentCreatedTime,
                 repliedAt: commentData.replied
-                    ? new Date(commentCreatedTime.getTime() + (5 + Math.random() * 115) * 1000)
+                    ? new Date(commentCreatedTime.getTime() + REPLY_DELAY_MS(commentData.minutesAgo))
                     : null,
             });
         }
@@ -2744,7 +2797,7 @@ export async function seedDemoData(
     // Create demo comments
     for (const commentData of DEMO_COMMENTS_SEED) {
         const post = createdPosts[commentData.postIndex];
-        const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
+        const commentCreatedTime = new Date(Date.now() - commentData.minutesAgo * 60 * 1000);
         await db.insert(comments).values({
             postId: post.id,
             workspaceId,
@@ -2761,9 +2814,12 @@ export async function seedDemoData(
             flagReason: commentData.flagReason ?? null,
             flagMeta: commentData.flagMeta ?? null,
             resolved: commentData.resolved ?? false,
+            // See the note at the refresh path above: the inbox orders by `createdAt`
+            // and the card displays `createdTime`, so both must be set.
+            createdAt: commentCreatedTime,
             createdTime: commentCreatedTime,
             repliedAt: commentData.replied
-                ? new Date(commentCreatedTime.getTime() + (5 + Math.random() * 115) * 1000) // 5-120s after creation
+                ? new Date(commentCreatedTime.getTime() + REPLY_DELAY_MS(commentData.minutesAgo))
                 : null,
         });
     }

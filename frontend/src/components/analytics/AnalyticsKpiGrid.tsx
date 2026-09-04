@@ -1,11 +1,19 @@
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { ShoppingCart, MessageSquare, Sparkles } from 'lucide-react';
 import { KpiCard } from './KpiCard';
 import { isKnownNotificationType } from './notificationTypes';
+import { getIntlLocale } from '@/utils/locale';
 import type { EcommerceAnalyticsOverview } from '@/lib/api';
 
-function formatMoney(amount: number, currency: string | null): string {
-    const value = amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+/**
+ * `intlLocale` is passed explicitly, never `undefined`. `toLocaleString(undefined, …)`
+ * formats in the BROWSER's locale, which in the Arabic UI on an ar-EG device renders
+ * Arabic-Indic digits («١٬٢٥٠») — the exact thing the app's `ar-SA-u-nu-latn` locale tag
+ * exists to prevent (see INTL_LOCALES in utils/locale). Fixed 2026-09-04 alongside the
+ * store card's last-sync line, which carried the same defect.
+ */
+function formatMoney(amount: number, currency: string | null, intlLocale: string): string {
+    const value = amount.toLocaleString(intlLocale, { maximumFractionDigits: 2 });
     return currency ? `${value} ${currency}` : value;
 }
 
@@ -16,6 +24,7 @@ function formatMoney(amount: number, currency: string | null): string {
  */
 export function AnalyticsKpiGrid({ overview }: { overview: EcommerceAnalyticsOverview }) {
     const t = useTranslations('ecommerceAnalytics');
+    const intlLocale = getIntlLocale(useLocale());
     const { recovery, replies } = overview;
     const cartLabel = isKnownNotificationType('abandoned_cart')
         ? t('byType.abandoned_cart').toLowerCase()
@@ -25,7 +34,7 @@ export function AnalyticsKpiGrid({ overview }: { overview: EcommerceAnalyticsOve
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
                 label={t('kpis.revenueRecovered')}
-                value={formatMoney(recovery.revenueRecovered, recovery.currency)}
+                value={formatMoney(recovery.revenueRecovered, recovery.currency, intlLocale)}
                 subValue={t('summary.cartsRecovered', { count: recovery.cartsRecovered })}
                 icon={<ShoppingCart className="w-5 h-5" aria-hidden="true" />}
                 caveat={t('attributionCaveat')}
