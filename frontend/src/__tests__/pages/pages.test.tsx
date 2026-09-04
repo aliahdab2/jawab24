@@ -9,10 +9,12 @@ import { pagesApi, api, subscriptionApi } from '@/lib/api';
 
 // Create mock functions
 const mockToastError = vi.fn();
+const mockToastWarning = vi.fn();
 
 vi.mock('sonner', () => ({
     toast: {
         error: (...args: unknown[]) => mockToastError(...args),
+        warning: (...args: unknown[]) => mockToastWarning(...args),
         success: vi.fn(),
         info: vi.fn(),
     },
@@ -2359,5 +2361,75 @@ describe('PagesPage - Business Info CTA reads the list payload', () => {
             expect(screen.getByText(enPages.businessInfoNudgeTextStrong)).toBeInTheDocument();
         });
         expect(screen.getAllByText(enPages.businessInfoNudgeTextStrong)).toHaveLength(1);
+    });
+});
+
+/**
+ * The READ path for a Facebook reconnect's refused pages.
+ *
+ * `auth/callback.tsx` syncs but does NOT render these messages: it redirects
+ * under the account's language (which can differ from the locale it rendered
+ * in) and has no usable workspace store, so a toast raised there arrived in the
+ * wrong language with no "Switch to ‹X›" action. It hands the outcome to
+ * /pages instead. This suite is the proof that /pages picks it up — a stash
+ * nobody drains is the same silence in a new place.
+ */
+describe('PagesPage - refused pages handed over by a Facebook reconnect', () => {
+    beforeEach(() => {
+        mockToastWarning.mockClear();
+        window.sessionStorage.clear();
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: MOCK_PAGES },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    const stash = (outcome: unknown) =>
+        window.sessionStorage.setItem('jawab24:pageSyncOutcome', JSON.stringify(outcome));
+
+    it('names the pages the plan refused, and does not let the warning expire', async () => {
+        stash({
+            skippedCount: 1,
+            skippedPages: [{ pageName: 'Jawab24 Test Salla' }],
+            skipReason: 'page_limit',
+            pageLimit: 1,
+        });
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
+        const [message, options] = mockToastWarning.mock.calls[0];
+        expect(String(message)).toContain('Jawab24 Test Salla');
+        // The merchant must act on this (upgrade) — it must not expire unread.
+        expect(options).toMatchObject({ duration: Infinity });
+    });
+
+    it('offers the workspace switch the auth callback could not', async () => {
+        stash({ alreadyMemberOf: [{ workspaceId: 'w2', workspaceName: 'Other Co', role: 'member', pageName: 'P' }] });
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
+        const [, options] = mockToastWarning.mock.calls[0];
+        expect(options).toHaveProperty('action.onClick');
+    });
+
+    it('clears the handoff as it reads it, so the warning cannot stack on a revisit', async () => {
+        stash({ takenCount: 1, takenPages: [{ pageName: 'Someone Elses Page' }] });
+
+        const first = renderPage(<PagesPage />);
+        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
+        first.unmount();
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(mockedPagesApi.getAll).toHaveBeenCalled());
+        expect(mockToastWarning).toHaveBeenCalledTimes(1);
+        expect(window.sessionStorage.getItem('jawab24:pageSyncOutcome')).toBeNull();
+    });
+
+    it('says nothing when no reconnect handed anything over', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => expect(mockedPagesApi.getAll).toHaveBeenCalled());
+        expect(mockToastWarning).not.toHaveBeenCalled();
     });
 });

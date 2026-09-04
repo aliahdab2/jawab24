@@ -33,6 +33,7 @@ import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import { whatsappConnectErrorKey } from '@/lib/whatsappConnectErrors';
 import type { Page, NoPagesReason } from '@jawab24/shared';
+import { reportPageSyncOutcome, takePageSyncOutcome, type PageSyncOutcome } from '@/features/pageSync';
 import dynamic from 'next/dynamic';
 
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
@@ -935,6 +936,33 @@ const PagesPage: NextPageWithLayout = () => {
     }
   }, []);
 
+  // One dependency object for the shared reporter, so a manual sync and a
+  // handed-over Facebook reconnect raise IDENTICAL messages with IDENTICAL
+  // actions. Two call sites with two hand-built dep objects is how the switch
+  // action ends up on one path and not the other.
+  const reportDeps = useMemo(() => ({
+    t,
+    locale,
+    onSwitchWorkspace: (workspaceId: string) => {
+      setActiveWorkspace(workspaceId);
+      fetchPages();
+    },
+  }), [t, locale, setActiveWorkspace, fetchPages]);
+  const reportDepsRef = useRef(reportDeps);
+  reportDepsRef.current = reportDeps;
+
+  // A Facebook reconnect syncs inside auth/callback.tsx but reports HERE.
+  // That leg redirects under the ACCOUNT's language (which can differ from the
+  // locale it rendered in) and has no usable workspace store, so rendering the
+  // refusals there gave the wrong locale and no switch action. It hands the
+  // outcome over instead; this drains it on arrival. `takePageSyncOutcome`
+  // clears as it reads, so a re-render or a later visit cannot stack these
+  // duration:Infinity warnings about a sync that already happened.
+  useEffect(() => {
+    const handedOver = takePageSyncOutcome();
+    if (handedOver) reportPageSyncOutcome(handedOver, reportDepsRef.current);
+  }, []);
+
   const handleSync = useCallback(async () => {
     if (!fbToken) {
       return;
@@ -942,75 +970,15 @@ const PagesPage: NextPageWithLayout = () => {
 
     try {
       setSyncing(true);
-      type SyncResponse = {
-        reason?: NoPagesReason | null;
-        takenCount?: number;
-        takenPages?: { pageName: string }[];
-        alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
-        trialBlockedCount?: number;
-        skippedCount?: number;
-        skippedPages?: { pageName: string }[];
-        skipReason?: 'subscription_inactive' | 'page_limit';
-        pageLimit?: number | null;
-      };
-      const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
+      const { data } = await api.post<PageSyncOutcome & { pages?: unknown[] }>('/pages/sync', { accessToken: fbToken });
 
       // Zero-page syncs carry the WHY; any other outcome clears it so stale
       // guidance never outlives a successful connect.
       setNoPagesReason(data?.reason ?? null);
 
-      // If any of the conflicting pages live in workspaces the user is already
-      // a member of, surface a one-tap switch instead of the generic "ask the
-      // owner to invite you" warning. We use the first match — typically all
-      // conflicts route to the same workspace anyway (a user only has one or
-      // two workspace memberships in practice).
-      const memberHit = data?.alreadyMemberOf?.[0];
-      if (memberHit) {
-        toast.warning(t('pageTakenInWorkspace', {
-          count: data!.alreadyMemberOf!.length,
-          workspaceName: memberHit.workspaceName,
-        }), {
-          duration: Infinity,
-          action: {
-            label: t('switchWorkspaceCta', { workspaceName: memberHit.workspaceName }),
-            onClick: () => {
-              setActiveWorkspace(memberHit.workspaceId);
-              fetchPages();
-            },
-          },
-        });
-      } else if (data?.takenCount && data.takenCount > 0) {
-        // Held by a workspace the user is NOT in. Name the pages so the merchant
-        // knows exactly what was withheld — never the holding account (D-039).
-        const takenNames = (data.takenPages ?? []).map(p => p.pageName);
-        const pageNames = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(takenNames);
-        toast.warning(t('pageTakenWarning', { count: data.takenCount, pageNames }), { duration: Infinity });
-      }
-
-      // Page(s) connected but auto-reply kept off because the channel already
-      // used its free trial under another account. Prompt the user to subscribe.
-      if (data?.trialBlockedCount && data.trialBlockedCount > 0) {
-        toast.warning(t('pageTrialUsedWarning', { count: data.trialBlockedCount }), { duration: Infinity });
-      }
-
-      // Page(s) REFUSED at connect because the plan's page limit was reached.
-      // Named explicitly so the merchant knows exactly which pages were left
-      // out — without this they'd just see fewer pages than they granted.
-      if (data?.skippedCount && data.skippedCount > 0) {
-        const names = (data.skippedPages ?? []).map(p => p.pageName);
-        const pageNames = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names);
-        if (data.skipReason === 'subscription_inactive') {
-          // Trial already used (returning identity) — NOT a page-count limit, so
-          // don't tell them to "upgrade for more pages"; they need to subscribe.
-          toast.warning(t('trialUsedSkippedWarning', { count: data.skippedCount, pageNames }), { duration: Infinity });
-        } else {
-          toast.warning(t('pageLimitSkippedWarning', {
-            count: data.skippedCount,
-            pageNames,
-            limit: data.pageLimit ?? 1,
-          }), { duration: Infinity });
-        }
-      }
+      // Every "we did not connect that page" outcome is explained by the shared
+      // reporter — see features/pageSync. Do NOT re-inline these toasts here.
+      reportPageSyncOutcome(data, reportDepsRef.current);
 
       // Refresh list
       fetchPages();
@@ -1020,7 +988,7 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [fbToken, fetchPages, t, setActiveWorkspace, locale]);
+  }, [fbToken, fetchPages]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;

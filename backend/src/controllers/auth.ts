@@ -4,6 +4,7 @@ import { cookiesService } from '../services/cookies';
 import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
+import { toClientSyncOutcome } from '../lib/pageSyncOutcome';
 import { settingsService } from '../services/settings';
 import { integrationRegistry } from '../integrations';
 import { AuthRequest, AuthResponse, PhoneOtpRequest, PhoneOtpVerifyRequest, createRequestLogger } from '../types';
@@ -20,7 +21,7 @@ import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpTransportUnavailableError, OtpVerifyResult } from '../services/otp';
 import { isPartnerUser } from '../services/partnerAccess';
-import { isValidPhone, isValidEmail, isSanctionedPhone, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
+import { isValidPhone, isValidEmail, isSanctionedPhone, normalizeArabic, isSafeRedirectPath, hasRefusedPages, type PageSyncOutcome } from '@jawab24/shared';
 import { isDemoFacebookId } from '../utils/demo';
 
 /**
@@ -1027,9 +1028,21 @@ export class AuthController {
             const workspaceId = scope
                 ? workspaces.find((w) => w.id === scope.workspaceId)?.id
                 : workspaces[0]?.id;
+            // The refusals this sync produced, handed back to the client below.
+            // A sync can succeed and still REFUSE pages (plan page limit, trial
+            // already used, page held by another workspace). This route is the leg
+            // a SIGNED-IN merchant takes to reconnect — `auth/callback.tsx` reaches
+            // it whenever the persisted store says authenticated, which on web is
+            // always — so dropping the outcome here left the merchant on /pages with
+            // fewer pages than they granted and nothing to explain it (observed
+            // 2026-09-04, Starter workspace at max_pages = 1). Same mapper as
+            // POST /pages/sync, so the two routes cannot answer differently.
+            let pageSync: PageSyncOutcome | undefined;
             if (workspaceId) {
                 try {
                     const syncResult = await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken, undefined, createRequestLogger(request.log));
+                    const outcome = toClientSyncOutcome(syncResult);
+                    if (hasRefusedPages(outcome)) pageSync = outcome;
                     if (syncResult.syncedPages.length === 0) {
                         // The link succeeded but no page was connected. Legitimate causes
                         // exist (page limit, trial already used on the channel, a page held
@@ -1098,7 +1111,10 @@ export class AuthController {
             // `embeddedPlatform` sessions with 401, so the entry would be dead.
             const isPartner = scope ? false : await isPartnerUser(updatedUser);
             const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, scopedWorkspaces, defaultWorkspaceId, { isPartner });
-            return reply.send(response);
+            // Nested rather than inlined: this is an auth response that happens to
+            // carry a sync side effect, and flattening the fields here would collide
+            // with the auth payload's own vocabulary.
+            return reply.send(pageSync ? { ...response, pageSync } : response);
 
         } catch (error) {
             // Facebook OAuth errors (expired/replayed code, invalid token) are user-side,

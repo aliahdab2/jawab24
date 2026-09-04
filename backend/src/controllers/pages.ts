@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { pagesService, isPageDisconnected, whatsappNeedsReconnect } from '../services/pages';
+import { toClientSyncOutcome } from '../lib/pageSyncOutcome';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
@@ -778,13 +779,20 @@ export class PagesController {
 
             const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages.map(serializePage) };
 
+            // The merchant-facing refusal fields (skipped / taken / trial-blocked /
+            // alreadyMemberOf) come from ONE mapper shared with /auth/facebook/link,
+            // so the two sync-producing routes cannot answer with different shapes.
+            // Do NOT re-inline them here.
+            Object.assign(response, toClientSyncOutcome({
+                syncedPages, skippedCount, skippedPages, skipReason, pageLimit,
+                takenCount, takenPages, trialBlockedCount, trialBlockedPages,
+                revokedCount, alreadyMemberOf, noPagesDiagnosis,
+            }));
+
             if (skippedCount > 0) {
-                // Pages REFUSED at connect (not persisted). Surface the names so the
-                // client can tell the merchant exactly which pages are missing, plus
-                // the REASON so it shows the right call-to-action.
-                response.skippedCount = skippedCount;
-                response.skippedPages = skippedPages;
-                response.skipReason = skipReason; // 'subscription_inactive' | 'page_limit'
+                // The prose `warning` / `subscriptionRequired` fields stay here: they
+                // are English API-surface strings, not what the app renders (the client
+                // builds its own localized message from the fields above).
                 if (skipReason === 'subscription_inactive') {
                     // Returning identity / trial-already-used: NOT a page-count limit.
                     // "Upgrade for more pages" is misleading — they must subscribe.
@@ -792,24 +800,13 @@ export class PagesController {
                     response.subscriptionRequired = true;
                 } else {
                     response.warning = `${skippedCount} page(s) were not connected because your plan's page limit was reached. Upgrade to connect more pages.`;
-                    response.pageLimit = pageLimit;
                 }
-            }
-
-            if (takenCount > 0) {
-                // Withheld because another workspace holds them. Names only — never
-                // the holding account (D-039); the client lists them by name.
-                response.takenCount = takenCount;
-                response.takenPages = takenPages;
             }
 
             // Pages connected but auto-reply kept OFF because the channel already
             // used its free trial under another account (and this account isn't
             // paying). The client surfaces a "subscribe to enable" notice.
             if ((trialBlockedCount ?? 0) > 0) {
-                response.trialBlockedCount = trialBlockedCount;
-                response.trialBlockedPages = trialBlockedPages;
-
                 // Best-effort persistent bell notification (the toast is transient).
                 // Sent to the billing owner — one per blocked page, capped at a few
                 // so a large sweep can't flood the bell. Failure must not break sync.
@@ -822,13 +819,6 @@ export class PagesController {
                         { pageName: blocked.pageName }
                     ).catch(err => request.log.error({ err }, 'Failed to send page_trial_used notification'));
                 }
-            }
-
-            // Pages whose holding workspace the user is already a member of — the
-            // client renders an actionable "Switch to ‹X›" affordance instead of
-            // the generic "ask the owner to invite you" warning.
-            if (alreadyMemberOf && alreadyMemberOf.length > 0) {
-                response.alreadyMemberOf = alreadyMemberOf;
             }
 
             if ((revokedCount ?? 0) > 0) {

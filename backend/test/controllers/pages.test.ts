@@ -538,6 +538,82 @@ describe('Pages Controller', () => {
             expect(sent.pages[0].accessToken).toBeUndefined();
         });
 
+        /**
+         * The refusal fields are the whole reason a merchant who granted two pages
+         * and got one is told WHY. They are produced by a mapper shared with
+         * POST /auth/facebook/link, so pinning them here also pins that the two
+         * routes answer with one shape. Nothing asserted them before this suite
+         * grew these cases — the mapper could have returned {} and stayed green.
+         */
+        describe('refusal fields', () => {
+            const refusalSync = (overrides: Record<string, unknown>) => {
+                vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 1, used: 1, remaining: 0 } as any);
+                vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({
+                    syncedPages: [{ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' }],
+                    skippedCount: 0, skippedPages: [], skipReason: 'page_limit', pageLimit: null,
+                    takenCount: 0, takenPages: [], trialBlockedCount: 0, trialBlockedPages: [],
+                    revokedCount: 0, alreadyMemberOf: [], noPagesDiagnosis: null,
+                    ...overrides,
+                } as any);
+                mockRequest.body = { accessToken: 'fb-token-abc' };
+            };
+
+            it('names the pages the plan refused, with the limit that refused them', async () => {
+                refusalSync({ skippedCount: 1, skippedPages: [{ pageName: 'Second Page' }], skipReason: 'page_limit', pageLimit: 1 });
+
+                await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+                const sent = (mockReply.send as any).mock.calls[0][0];
+                expect(sent).toMatchObject({
+                    skippedCount: 1,
+                    skippedPages: [{ pageName: 'Second Page' }],
+                    skipReason: 'page_limit',
+                    pageLimit: 1,
+                });
+            });
+
+            it('withholds pageLimit on a trial-already-used refusal — "upgrade for more pages" is the wrong answer there', async () => {
+                refusalSync({ skippedCount: 1, skippedPages: [{ pageName: 'A' }], skipReason: 'subscription_inactive', pageLimit: 1 });
+
+                await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+                const sent = (mockReply.send as any).mock.calls[0][0];
+                expect(sent.skipReason).toBe('subscription_inactive');
+                expect(sent.pageLimit).toBeUndefined();
+                expect(sent.subscriptionRequired).toBe(true);
+            });
+
+            it('names pages held by another workspace, and flags the ones the user can switch to', async () => {
+                const alreadyMemberOf = [{ workspaceId: 'ws-2', workspaceName: 'Other Co', role: 'member', pageName: 'Held' }];
+                refusalSync({ takenCount: 1, takenPages: [{ pageName: 'Held' }], alreadyMemberOf });
+
+                await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+                const sent = (mockReply.send as any).mock.calls[0][0];
+                expect(sent).toMatchObject({ takenCount: 1, takenPages: [{ pageName: 'Held' }], alreadyMemberOf });
+            });
+
+            it('reports pages connected but kept off by a used trial', async () => {
+                refusalSync({ trialBlockedCount: 1, trialBlockedPages: [{ pageName: 'Blocked' }] });
+
+                await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+                const sent = (mockReply.send as any).mock.calls[0][0];
+                expect(sent).toMatchObject({ trialBlockedCount: 1, trialBlockedPages: [{ pageName: 'Blocked' }] });
+            });
+
+            it('omits every refusal field when nothing was refused', async () => {
+                refusalSync({});
+
+                await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
+
+                const sent = (mockReply.send as any).mock.calls[0][0];
+                for (const key of ['skippedCount', 'skippedPages', 'skipReason', 'pageLimit', 'takenCount', 'takenPages', 'trialBlockedCount', 'trialBlockedPages', 'alreadyMemberOf']) {
+                    expect(sent).not.toHaveProperty(key);
+                }
+            });
+        });
+
         it('should return 400 when accessToken is missing', async () => {
             mockRequest.body = {};
 
