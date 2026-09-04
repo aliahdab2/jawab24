@@ -226,6 +226,22 @@ go into a live listing as written:
 
 The remaining five bullets describe shipped, demonstrable behaviour and are fine.
 
+### ⛔ A third line, in the long description's closing paragraph (found 2026-09-04)
+
+**«ابدأ مجاناً اليوم — بدون بطاقة ائتمان» / "Start free today — no credit card required."**
+
+That closer was written for jawab24.com's own signup, where it is true. It is **not** a claim
+we can make on this listing. Under D-103 both listed plans are **paid** (146 / 296 SAR) and,
+under Article 5, the merchant subscribes through **Salla's** checkout, not ours — so whether a
+card is collected when the 14-day trial starts is Salla's flow, which we neither control nor
+have ever measured. The whole shelf's model is "paid plan carrying a free trial" (measured
+2026-08-26), and a free-and-no-card promise sitting on top of two priced plans reads as a
+contradiction to a reviewer before it reads as a benefit.
+
+**Action:** replace the clause with the trial, which IS true and IS the offer —
+«جرّبه مجاناً 14 يوماً» / "Free 14-day trial." Do not paste the credit-card promise unless
+someone has watched Salla's own trial checkout and can say what it asks for.
+
 ## 4. App Pricing — ✅ UNBLOCKED (D-103 + D-104, 2026-08-26). Fill the two paid plans
 
 ⚠️ **History.** This section was 🔴 BLOCKED through two states, both now resolved:
