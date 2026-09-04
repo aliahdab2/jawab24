@@ -41,7 +41,7 @@
   },
   "stats": {
     "available": "Always Available",
-    "speed": "Response Time",
+    "speed": "Median Reply Time",
     "accuracy": "Accuracy Rate",
     "accuracyLabel": "Accuracy"
   },
@@ -56,11 +56,11 @@
     "languageTitle": "Arabic & English Support",
     "languageDesc": "Auto-replies in your customer's language - whether they write in Arabic or English",
     "instantTitle": "Instant 24/7 Response",
-    "instantDesc": "Never keep customers waiting, we respond in less than a second even while you sleep",
+    "instantDesc": "Never keep customers waiting — replies go out automatically around the clock, even while you sleep",
     "knowledgeTitle": "Your Business Info",
     "knowledgeDesc": "Add your Business Info, products, and prices to train your own AI assistant",
     "ecommerceTitle": "Shopify, Salla & Zid",
-    "ecommerceDesc": "Syncs your product catalog in real-time for accurate replies",
+    "ecommerceDesc": "Syncs your product catalog automatically so replies stay accurate",
     "mobileTitle": "Mobile Optimized",
     "mobileDesc": "Manage your business from anywhere with an easy-to-use interface on all devices"
   },
@@ -71,7 +71,7 @@
     "description": "Connect your store and let Jawab handle the rest — from recommending the right product to answering detailed questions about features, materials, and sizing. In Arabic and English.",
     "feature1": "Recommends products based on what customers describe",
     "feature2": "Compares options and answers follow-up questions",
-    "feature3": "Real-time prices, stock, and product details",
+    "feature3": "Prices and product details update as soon as they change in your store",
     "feature4": "Responds naturally in Arabic and English",
     "availableOn": "Available on",
     "shopifyStore": "Shopify App Store",
