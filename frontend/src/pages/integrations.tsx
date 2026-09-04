@@ -38,6 +38,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { useIsDemoUser } from '@/features/demo';
 import { computeFactCoverage } from '@/utils/businessCoverage';
@@ -202,6 +203,7 @@ function ConnectedStoreCard({
 }) {
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
+  const { intlLocale } = useLanguage();
   const { canEdit } = useWorkspaceRole();
   const connectAvailable = useConnectAvailable(platform.id);
   const isDemoUser = useIsDemoUser();
@@ -364,9 +366,26 @@ function ConnectedStoreCard({
         <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.storeMetaClass)}>
           <div>
             <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
+            {/* ⭐ <bdi> around the timestamp, and the APP's locale — not `undefined`.
+                Two defects lived in one line, both visible on the Arabic store card:
+                (a) `toLocaleString(undefined, …)` formats in the BROWSER's locale, so an
+                    Arabic dashboard on an English-locale device printed «4 Sept 2026, 00:22»;
+                (b) a formatted date-time is several runs joined by neutrals («4», «Sept»,
+                    «2026», «00:22»), and in an RTL paragraph those neutrals take the RTL
+                    level — so the runs painted right-to-left and the label's colon landed on
+                    the wrong side. Same class as the Business facts list, same fix, and the
+                    full rationale is written out at BusinessFactRows.tsx:205. Do not
+                    "simplify" the <bdi> back to a bare span or drop the locale argument.
+                ⚠️ jsdom does no bidi layout, so a unit test can assert the element but never
+                the painted order — that needs real Chrome. */}
             <p className="text-xs text-muted-foreground">
               {t('products')}: {store.productCount} &middot;{' '}
-              {t('lastSync')}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t('never')}
+              {t('lastSync')}:{' '}
+              <bdi>
+                {store.lastSyncAt
+                  ? new Date(store.lastSyncAt).toLocaleString(intlLocale, { dateStyle: 'medium', timeStyle: 'short' })
+                  : t('never')}
+              </bdi>
             </p>
           </div>
           <div className="flex gap-2">
