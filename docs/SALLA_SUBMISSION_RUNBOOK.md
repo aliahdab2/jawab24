@@ -104,6 +104,42 @@ for the Partners portal *and* the `s.salla.sa` store admin; only the human check
   worth knowing: a Salla reviewer who installs onto *their own* test store now binds it to the
   review account instead of hitting `email_mismatch`.
 
+### ✅ Update — 2026-09-04: review store RE-ESTABLISHED, and «Reauthorize App» does not exist
+
+The store row deleted around 2026-08-30 was rebuilt today. **Three premises this runbook and the
+approved plan carried were wrong, and all three cost time — record them so nobody re-walks them:**
+
+1. **The app was never uninstalled Salla-side.** «جواب24» (`665811310`) is still active on
+   `2108580704` («مشترك في 2026/08/23», plan `free_hidden`), next to «Jawab24-Dev». Only *our*
+   `ecommerce_stores` row was gone. A missing store row is not evidence of a missing install.
+2. ⛔ **`s.salla.sa/apps/installed/e-118007999` is a 404, and there is NO «Reauthorize App»
+   control anywhere in the store admin.** Installed apps live at **`s.salla.sa/apps`**; the entry
+   for that store is `/apps/1354133845` and its «خيارات التطبيق» menu offers exactly two items —
+   «تفاصيل الإشتراك» and «حذف التطبيق». A token re-push cannot be triggered from the merchant side
+   at all.
+3. ✅ **The re-push route is the PARTNERS PORTAL.** `portal.salla.partners/apps/<appId>` lists every
+   demo store, and each store **without** the app installed carries an **«Install App»** link
+   (`s.salla.sa/auth/auto?…&url=…/apps/install/<appId>`). It installs in one hop — no confirm
+   screen — and lands on «The application has been successfully installed». ⇒ **an UNPUBLISHED app
+   can be installed on demand**, which is also what makes Tier 3.9's re-install safe.
+
+**Store chosen: «Jawab24 Dev Store 3» (`671738424`), not the old `2108580704`.** Installing on a
+store that had no install avoided uninstalling the only known-good one, and it leaves
+`2108580704` live as the Tier 3.9 uninstall target. Cost: the four docs that named `2108580704`
+as *the* review store (fixed in this pass).
+
+**Verified at the read path, not inferred:** `pending_ecommerce_installs` → `status=claimed`;
+`ecommerce_stores` bound to the review user; 20 products, «متجر تجريبي», SAR, categories synced;
+`webhookStatus.registered` = 7 events with **`failed: []`**; `token_expires_at` 2026-09-18.
+Page «Jawab24 Salla Test» linked, the Zid demo's page «Jawab24 Test» untouched. Reply proof both
+ways: the Salla page quoted Salla prices in 2604 ms; the Zid page quoted Zid prices with no
+leakage.
+
+⛔ **3.11.1 did NOT produce the predicted clean `none`.** `syncSallaBilling` threw
+`EcommerceApiHttpError: salla API HTTP error: 404` out of `fetchSallaAppSubscription`, logged at
+level 50 «Post-claim Salla billing sync failed». The claim itself still succeeded. Envelope and
+consequences: `docs/testing/salla_live_payloads.jsonl` and the 3.11.1 row of the test plan.
+
 ### The Connect dead end — confirmed, now guarded
 
 Easy Mode is confirmed, so `connectStore` had no working destination: the OAuth authorize URL 404s
@@ -111,11 +147,17 @@ for an Easy-Mode app (D-031) and `SALLA_APP_STORE_URL` cannot be set because **n
 point at**. The `/integrations` Salla card kept its Connect button live under the "coming soon"
 badge, and the card's *reconnect* action pointed at the same dead redirect.
 
-**Who could actually reach it — narrower than first reported.** `/integrations` is **admin-only**
-today (`isAuthenticated && !isAdmin → /dashboard`, "while we finish public roll-out"), so no
-merchant could see the card at all. An earlier draft of this section said merchants were hitting a
-Salla error page; that was wrong. The exposure was ours, and it would have become a merchant-facing
-dead end the moment the page opened up.
+**Who could actually reach it — narrower than first reported.** `/integrations` **was** admin-only
+when this was written (`isAuthenticated && !isAdmin → /dashboard`, "while we finish public
+roll-out"), so no merchant could see the card at all. An earlier draft of this section said
+merchants were hitting a Salla error page; that was wrong. The exposure was ours, and it would have
+become a merchant-facing dead end the moment the page opened up.
+
+⚠️ **That gate came OFF in #1048 (2026-09-04, deployed `d069cc5`)** — «المتاجر» is now reachable by
+any authenticated merchant, verified live as the non-admin review account. The guard above is what
+still holds the dead end shut, so the removal is safe; but every doc sentence reading
+"`/integrations` is admin-only" is now false, and the Service Trial instructions were rewritten
+back onto «المتاجر» because of it (`PORTAL_FIELD_MAP.md` §6).
 
 **Blast radius, measured before acting: ZERO** `/salla/store/connect` and `/salla/auth` requests in
 7 days of nginx logs (only `GET /api/salla/store` status polls from the page).
@@ -296,13 +338,19 @@ submission happens on the production app.
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
       (all three images are READY — `docs/store-listing/salla/gallery-{1,2,3}.png`, re-shot
       and review-corrected 2026-09-04; what is left is the portal sitting that uploads them)
-- [ ] A real Salla store connected end-to-end — install + token push + claim ✅ 2026-08-23 (demo
-      store, D-093) — **but the store row was later DELETED (discovered 2026-08-30) and the 08-23
-      21:30 re-push expired unclaimed.** Rebuild: *Reauthorize App* in the demo-store admin →
-      claim as the review account. Then link a **second** page to it — the account's only page
-      serves the Zid demo (see `SALLA_TEST_PLAN.md` Tier 3 preamble, 2026-09-03)
-- [ ] **Tier 3 green** — `track_shipment` ✅ 2026-08-24; remaining: 3.9 (uninstall + billing-mirror
-      cancel, then re-install/re-claim), 3.10, 3.11.1 (fires at the claim)
+- [x] A real Salla store connected end-to-end — install + token push + claim. First done
+      2026-08-23; that row was DELETED (discovered 2026-08-30) and its re-push expired unclaimed.
+      **RE-ESTABLISHED 2026-09-04 14:10Z on a DIFFERENT demo store** —
+      `demostore.salla.sa/dev-yzhw7uhagdzxpdvy`, merchant **`671738424`** («Jawab24 Dev Store 3»,
+      portal email `yzhw7uhagdzxpdvy@email.partners`), claimed by the review account
+      `ahdabeslov@gmail.com`. Read-path verified: 20 products, `store_name «متجر تجريبي»`, SAR,
+      7 webhooks registered with `failed: []`, `token_expires_at` = 2026-09-18. Page
+      «Jawab24 Salla Test» linked; the Zid demo's page left untouched. See the 2026-09-04 update
+      above for why *Reauthorize App* is not the route
+- [ ] **Tier 3 green** — `track_shipment` ✅ 2026-08-24; 3.11.1 ✅ CAPTURED 2026-09-04 (a **404**,
+      not the predicted `none` — see the 3.11.1 row in `SALLA_TEST_PLAN.md`); remaining: 3.9
+      (uninstall + billing-mirror cancel, then re-install/re-claim — now safe to run against
+      **`2108580704`**, whose install is still live and is no longer the review store), 3.10
 - [x] `SALLA_APP_ID=665811310` set — **2026-08-30**, verified in-container (also 2026-09-03 after
       the next deploy). The D-104 rail is armed
 - [ ] `SALLA_APP_STORE_URL` (only knowable post-publish — see the ordering note in Phase 2.5)

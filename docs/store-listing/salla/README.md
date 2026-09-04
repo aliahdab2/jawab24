@@ -158,10 +158,11 @@ Both are visible in the *old* gallery images and absent from the new ones.
    never screenshot real customers. The replies were authored to match the catalog, and
    the prices they quote (450/750 ريال) are the catalog's real ones.
 2. gallery-2's modal dims the page behind it — that is the app's real UX.
-3. gallery-1 is the Stores page (`/integrations`), which is behind an admin-only client
-   gate during rollout. Everything shown is merchant-facing UI; the gate is temporary and
-   tracked in `PORTAL_FIELD_MAP.md` §6, where the reviewer's own instructions deliberately
-   route around it via `/salla/onboarding`.
+3. gallery-1 is the Stores page (`/integrations`). It **was** behind an admin-only client gate
+   when the shoot ran — that gate came off in this same PR (see §1 above), and the page was
+   confirmed reachable in production by a non-admin account on 2026-09-04. The reviewer's
+   instructions in `PORTAL_FIELD_MAP.md` §6 now open «المتاجر» directly instead of routing
+   around it via `/salla/onboarding`.
 4. The browser-window frame crops the bottom ~8% of each raw capture — intentional
    composition, not a clipped screenshot.
 5. **Icon**: the confirmed spec (launch-actions §1) is 512×512 ≤1 MB. Delivered at

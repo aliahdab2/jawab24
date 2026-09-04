@@ -430,6 +430,21 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   - **Category links**: each product's `categories[].urls.customer` is gathered per sync (`collectSallaCategories`) and stored atomically on `platform_data.categories` (`saveStoreCategories`, ≤10, sorted by name, never wiped by an empty page). `buildProductSummary` renders them as one `Categories: name — url | …` line between `Store:` and `Top Products:`, with its own 600-char budget so it never crowds out products. This is the answer to «ابغى رابط التنانير», which the model otherwise invented (`?category=…`).
   - The demo fashion store is seeded in this exact shape (`handle: null`, `productUrl`, `platformData.categories`) so eval Cat 82 measures the renderer, not hand-typed text.
 
+- **How to get a fresh `app.store.authorize` push for an UNPUBLISHED app (2026-09-04)** — needed
+  whenever a dev/review store row is lost and the merchant-side install still exists:
+  - ⛔ **Not from the store admin.** There is no «Reauthorize App» control there. Installed apps
+    live at `s.salla.sa/apps`, and an entry's «خيارات التطبيق» menu offers only
+    «تفاصيل الإشتراك» and «حذف التطبيق» — no re-push.
+  - ✅ **From the Partners portal**: `portal.salla.partners/apps/<appId>` lists the partner's demo
+    stores, and any store **without** the app installed carries an «Install App» link of the form
+    `s.salla.sa/auth/auto?access_token=…&source=partners&url=…%2Fapps%2Finstall%2F<appId>`. Opening
+    it installs in one hop (no confirm screen) and fires the webhook. So an unpublished app can be
+    installed on demand — which is also what makes an uninstall/re-install rehearsal recoverable.
+  - The install link's `access_token` is short-lived; re-read the portal page rather than reusing a
+    copied URL.
+  - Current Salla review store: `demostore.salla.sa/dev-yzhw7uhagdzxpdvy`, merchant `671738424`
+    (claimed 2026-09-04). The older `2108580704` keeps its install as the uninstall-test target.
+
 - **Billing — Article 5 (Salla-managed billing is MANDATORY for paid apps)**:
   - Salla apps-policy Article 5 requires paid-app payment to run "عبر منصة سلة". Steering a Salla-sourced merchant to Stripe risks delisting, and unpublishing a live Salla app is **not self-serve** (it needs a booked meeting with Salla), so the downside is unrecoverable.
   - Jawab24 launches on Salla **free-tier-only**, which is compliant — but the product's normal upgrade CTAs led to Stripe. That leak is closed by the **Article-5 guard**.

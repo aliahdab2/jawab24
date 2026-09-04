@@ -67,9 +67,12 @@ Connect button live under the "coming soon" badge, so the button led to a Salla 
 same finding with a non-zero count would have been an incident with merchants to contact.
 
 ⚠️ **Correction to an earlier draft of this section:** it said merchants clicking "Connect Salla"
-were landing on a Salla error page. They were not — `/integrations` is **admin-only** today
+were landing on a Salla error page. They were not — `/integrations` **was** admin-only at the time
 (`isAuthenticated && !isAdmin → /dashboard`), so only we could reach the card. The dead end was real
 but ours, and it would have become merchant-facing the moment the page opened up.
+⚠️ **That gate was dropped in #1048 (2026-09-04, deployed `d069cc5`)** — «المتاجر» is now reachable
+by any authenticated merchant. What still holds the dead end shut is the `isConnectAvailable`
+guard below, not the page gate.
 
 **Guard shipped** (same PR as the runbook correction). One predicate,
 `controllers/salla.ts:isConnectAvailable`, answers for every entry point — `POST /store/connect`
@@ -157,20 +160,37 @@ condition that exposed the hydration race below.
 Requires a **real Salla store** and a **real order**. Nothing here is simulable; every row
 has cost production defects before. Run in order — later rows depend on earlier state.
 
-> ### ⛔ The review account also carries the Zid demo — Salla needs its OWN page (2026-09-03)
+> ### ✅ Tier 3 preconditions — SATISFIED 2026-09-04. Read this before re-planning any of it.
+>
+> **The review store is `demostore.salla.sa/dev-yzhw7uhagdzxpdvy`, merchant `671738424`**
+> («Jawab24 Dev Store 3»), claimed by `ahdabeslov@gmail.com` on 2026-09-04 14:10Z. ⛔ The old
+> `2108580704` is **no longer the review store** — its app install is deliberately left in place
+> as the Tier 3.9 uninstall target. Every dated "Results" section below that names `2108580704`
+> is a historical record, not current state.
 >
 > Store context is **page-scoped**: `pages.ecommerce_store_id` is a single FK, so every reply
-> and every order tool on a page reads exactly one store. The review account
-> (`ahdabeslov@gmail.com`) has one page, «Jawab24 Test», and it is linked to the Zid demo
-> store (`h47p59.zid.store`) for the Zid relaunch review. Rows 3.4 and the Service Trial
-> therefore need a **second page** linked to the Salla store.
+> and every order tool on a page reads exactly one store. The review account holds **three**
+> pages (all created 2026-09-03 — ⛔ the earlier note that "the account has one page, so create
+> a new one" was already obsolete when written; check `pages` first):
 >
-> ⛔ In the Salla onboarding "Connect Facebook Page" step, select only that new page. The
-> step lists every workspace page with no "already linked" marker, and
-> `services/ecommerce.ts:linkStoreToPage` rebinds **silently** — choosing «Jawab24 Test»
-> would steal it from Zid mid-review with no warning. Verify after linking:
-> `SELECT name, ecommerce_store_id FROM pages WHERE workspace_id = …` shows each page on its
-> own store.
+> | Page | Linked store |
+> |---|---|
+> | «Jawab24 Test» `4284005e` | Zid demo `h47p59.zid.store` — ⛔ leave alone, it serves the Zid review |
+> | **«Jawab24 Salla Test» `ff07b9b7`** | **the Salla store above** (linked 2026-09-04) |
+> | «Jawab24 Shopify Test» `d6541701` | unlinked |
+>
+> ⛔ **The silent-rebind footgun is real and unguarded in the UI.** Both the onboarding
+> "Connect Facebook Page" step and the «تكامل سلة» card's page selector on «المتاجر» list every
+> workspace page with **no "already linked" marker**, and
+> `services/ecommerce.ts:linkStoreToPage` rebinds silently — choosing «Jawab24 Test» would steal
+> it from Zid mid-review with no warning at all. Verify after any link:
+> `SELECT p.name, e.platform, e.store_domain FROM pages p LEFT JOIN ecommerce_stores e ON e.id =
+> p.ecommerce_store_id WHERE p.user_id = …` shows each page on its own store.
+>
+> ⏭ **Still owed on the Salla page:** its Business Info is empty — the card shows
+> «أضف معلومات نشاطك التجاري». The catalog alone answers product/price questions (proven), so
+> this is not a blocker, but the reviewer sees an "incomplete" nudge. Same for the store card's
+> «سياسات المتجر غير مكتملة» (delivery/payment policies are not API-syncable — D-102).
 >
 > ⚠️ **Reconcile silence is NOT evidence the billing gate is off.** `SallaBillingReconcile`
 > logs only when `scanned > 0`; with no active non-demo Salla store it runs silently every
@@ -269,7 +289,37 @@ prod `env/backend.env` + container recreate** — unset, every sync answers `no_
 
 | # | Step | Expected | If it fails |
 |---|---|---|---|
-| 3.11.1 | With the app installed but NOT subscribed, run one reconcile pass (or wait ≤6h) | `syncSallaBilling` → `no_subscription` or `paused`. **No `salla-billing-unreadable-response` in Sentry** | An `unreadable` event IS the capture: read its `reason` + logged keys, narrow the parser, do not widen the "none" branch to swallow it |
+| 3.11.1 | With the app installed but NOT subscribed, run one reconcile pass (or wait ≤6h) | ~~`no_subscription` or `paused`~~ — **✅ RUN 2026-09-04, and the prediction was WRONG: it THROWS a 404.** See the row below | An `unreadable` event IS the capture: read its `reason` + logged keys, narrow the parser, do not widen the "none" branch to swallow it |
+
+**⛔ 3.11.1 RESULT (2026-09-04, the post-claim hook on merchant `671738424`).** Neither predicted
+outcome occurred. `syncSallaBilling` threw:
+
+```
+EcommerceApiHttpError: salla API HTTP error: 404
+  at fetchSallaAppSubscription (backend/src/services/sallaBilling.ts:92)
+  at syncSallaBilling (backend/src/services/sallaBilling.ts:337)
+level 50 · msg "Post-claim Salla billing sync failed" · storeId 7de48c46-…
+```
+
+`sallaApiGet` throws on any non-2xx **before** the deliberate three-way
+`subscription` / `none` / `unreadable` classification runs, so **a 404 is a fourth state the
+design does not name.** Two real consequences:
+
+- every install of a store with no paid subscription writes a **level-50 Sentry error** — after
+  publish that is every merchant between install and subscribe, and permanently for anyone who
+  never subscribes;
+- in `reconcileSallaBilling` the throw lands in the per-store `catch` → `result.errors++` +
+  `log.warn`, so such stores count as sweep **errors**, not as "nobody is paying".
+
+✅ It never wrongly revokes — the throw writes nothing — so this does **not** block Submit.
+
+⛔⭐ **Do NOT "fix" it by mapping 404 → `none` yet.** What a 404 *means* is unproved. Ruled out:
+bad token and wrong app id (the same token synced 20 products; `SALLA_APP_ID` is armed). Still
+open: (a) no subscription resource exists ⇒ 404, or (b) `/admin/v2/apps/{id}/subscriptions` is
+unavailable while the app is in Development. Telling them apart needs a store **with** a paid
+subscription, and an unpublished app has no paid checkout — i.e. not before publish, for the same
+reason 3.11.2–3.11.5 wait. If (b) is the truth, mapping 404 → `none` would **pause paying
+merchants** the day after publish. Classify it explicitly as its own outcome instead, or defer.
 | 3.11.2 | Subscribe the reviewer/demo store to **الأعمال** inside Salla | `app.subscription.started` 200 → a verify runs → `subscriptions` row `payment_method='salla'`, `salla_store_id` set, plan = business, `current_period_end` = Salla's `end_date` | `unknown_plan` ⇒ the wizard's plan name/price does not match `config/sallaBilling.ts` — fix the map, never the guess. `unknown_state` ⇒ `end_date` arrived in a shape `parseDate` rejects: capture it verbatim |
 | 3.11.3 | Confirm the trial reads as a trial | during the 14-day trial the row is `status='trialing'` with `trial_ends_at` = `end_date` | Reads `active` instead ⇒ the null-price trial heuristic is wrong for Salla; both entitle, so fix the label, do not panic |
 | 3.11.4 | Stripe surfaces are suppressed for that merchant | plan select / top-up / checkout all refuse with **400 `SALLA_BILLED`**, and the UI shows the managed-billing banner instead of a CTA | A Stripe CTA reachable ⇒ Article-5 breach; stop and fix before the reviewer sees it |
