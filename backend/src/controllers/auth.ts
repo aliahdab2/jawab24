@@ -141,7 +141,8 @@ export class AuthController {
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
             // 9. Build response. Phone collection is intentionally NOT forced during
-            // onboarding — see decoupling note in src/services/sms.ts / WHATSAPP_PLAN.md.
+            // onboarding — see decoupling note in WHATSAPP_PLAN.md. (The old pointer to
+            // src/services/sms.ts is gone: that file was deleted with the SMS rail, D-123.)
             const [defaultWorkspaceId, isPartner] = await Promise.all([
                 workspaceService.resolveDefaultWorkspaceId(user.id),
                 isPartnerUser(user),

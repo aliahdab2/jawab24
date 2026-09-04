@@ -80,9 +80,9 @@ const CUSTOMER_SLOT_EN: TemplateSlot = { variable: 'customer_name', fallback: 't
 const ORDER_SLOT: TemplateSlot = { variable: 'order_number', fallback: '—', example: '72524870' };
 
 /**
- * Canonical bodies. Wording mirrors the SMS seeds in
- * `customerNotifications.seedDefaults` so a merchant switching channels sees the
- * same message — minus the placeholders WhatsApp cannot leave empty.
+ * Canonical bodies. Wording mirrors the seed bodies in
+ * `customerNotifications.seedDefaults` so the template and the stored default stay
+ * consistent — minus the placeholders WhatsApp cannot leave empty.
  */
 export const CANONICAL_TEMPLATES: Record<WhatsAppNotificationType, Record<TemplateLanguage, CanonicalTemplate>> = {
     order_confirmed: {

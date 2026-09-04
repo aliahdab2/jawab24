@@ -93,9 +93,10 @@ export class CustomerNotificationService {
             // re-reads messageSent at send time (see send()), so the queued job sends it.
             //
             // ⛔ `variables` must be upgraded WITH `messageSent`, not instead of it.
-            // They are two renderings of the same values, read by different rails:
-            // SMS sends the flattened `messageSent`, WhatsApp rebuilds {{1}},{{2}},…
-            // from `variables`. Upgrading only the text left the WhatsApp send filling
+            // They are two renderings of the same values: `messageSent` is the flattened
+            // text (kept as the seat for a future text rail — the SMS one was retired,
+            // D-123), while WhatsApp rebuilds {{1}},{{2}},… from `variables`. Upgrading
+            // only the text left the WhatsApp send filling
             // {{3}} from the STALE variables — telling the customer «سيصلك من مندوب
             // التوصيل» on the very event that carried the real tracking number.
             if (upgradePendingOnDuplicate && platformEventId) {
