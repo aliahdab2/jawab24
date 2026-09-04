@@ -62,9 +62,9 @@ pruned to a single store — no real customer, page or merchant appears anywhere
 
 | File | Size | Shows |
 |---|---|---|
-| `gallery-1.png` | 1366×768 | **المتاجر** — «ربط سلة» card, «أزياء الخليج» with «المنتجات المزامنة: 40» and the last-sync time, the linked-page chip, order-notification toggles below (WhatsApp — the SMS rail was retired, D-123). Caption: «اربط متجرك في سلة بواتساب وفيسبوك وإنستغرام في دقيقة». |
+| `gallery-1.png` | 1366×768 | **المتاجر** — «ربط سلة» card, «أزياء الخليج» with «المنتجات المزامنة: 40» and the last-sync time, the linked-page chip, order-notification toggles below (WhatsApp — the SMS rail was retired, D-123). Caption: «اربط متجرك في سلة بواتساب وفيسبوك وإنستغرام في دقيقة». ⛔ **NOT READY TO SHIP AS-IS:** this screen is admin-only in production. See «What still needs a re-shoot» below. |
 | `gallery-2.png` | 1366×768 | **اختبار الرد الذكي** — «كم سعر العباية السوداء؟ وهل متوفر مقاس M؟» answered «سعر العباية الكلاسيك السوداء هو 450 ريال، ومقاس M متوفر حالياً.», tagged «رد ذكي» with the real latency. A **genuine pipeline reply**, not staged: the modal called the local backend + ai-worker and the price comes from the synced Salla catalog. |
-| `gallery-3.png` | 1366×768 | **التعليقات**, auto-replied filter — Arabic and English comment→Smart-Reply pairs quoting real catalog prices (450/750 ريال) and shipping terms. |
+| `gallery-3.png` | 1366×768 | **التعليقات**, auto-replied filter — comment→Smart-Reply pairs. ⛔ **NOT READY TO SHIP AS-IS:** the crop shows the first two cards only, and on this shoot both are in **English** («Do you carry plus sizes?», «Do you ship internationally?»). The Arabic pairs («مها الشهري», «رنا السلمي», quoting 450/750 ريال) are in `sources/raw-comments.png` but below the fold. See «What still needs a re-shoot» below. |
 | `benefit-1.png` | 1600×1600 | Catalog awareness — product chip + «مزامنة تلقائية من متجرك في سلة» + a Q&A bubble pair. |
 | `benefit-2.png` | 1600×1600 | Arabic-first — two dialect exchanges (خليجي, مصري) each answered by a Smart Reply. |
 | `benefit-3.png` | 1600×1600 | Three channels — WhatsApp/Facebook/Instagram flowing into one Jawab24 hub. |
@@ -74,6 +74,52 @@ pruned to a single store — no real customer, page or merchant appears anywhere
 | `sources/raw-*.png` | 3415×1920 | The unframed app captures. **Committed** — see above for why. |
 | `sources/capture.js`, `sources/stage.sh` | — | The shoot itself. |
 | `sources/*.html`, `frame.css`, `render.js` | — | The marketing frames; Cairo embedded locally, no external requests. |
+
+## What still needs a re-shoot ⛔
+
+Found reviewing the 2026-09-04 shoot. Both are in the shipped PNGs; neither is fixed by
+editing this file, so **do not upload gallery-1 or gallery-3 to the portal until these
+are closed.** `sources/capture.js` now fails the shoot on the second one rather than
+letting it ship again.
+
+### 1. gallery-1 shows a screen a Salla merchant cannot open
+
+`/integrations` and its «المتاجر» nav item are **admin-only in production**:
+
+- `Sidebar.tsx` → `getNavigationGroups` renders `nav.integrations` only `...(options.isAdmin ? … : [])`
+- `pages/integrations.tsx` redirects any authenticated non-admin to `/dashboard`
+
+That gate is why `stage.sh merchant` sets `is_admin = true` — the shot is not
+producible without it. So the App Gallery's LEAD image, captioned «اربط متجرك في سلة …
+في دقيقة», advertises a screen that every merchant who installs from the Salla App
+Store will look for and not find.
+
+Two ways to close it, and the choice is the owner's:
+
+- **Drop the gate.** It is described in `Sidebar.tsx` as temporary («admin-only while
+  we finish the public roll-out»). If it goes before submission, the shot becomes
+  truthful with no re-shoot, and `is_admin = true` comes out of `stage.sh`.
+- **Re-shoot on a merchant-visible surface** — `/salla/onboarding` (which the
+  reviewer's own Service Trial script already uses) or `/pages`. Changes the
+  composition and needs a caption that matches the new screen.
+
+### 2. gallery-3's crop is English-only, against an Arabic caption
+
+The marketing frame shows roughly the first two comment cards. On this shoot the
+seeder's ordering put two English conversations there, under «يرد على تعليقات فيسبوك
+وإنستغرام تلقائياً», for the **Saudi** Salla App Store — and the approved shot-list
+(`.planning/SALLA_LISTING_BRIEF.md` §4, shot 3) specifies «Customer comment **in
+Arabic**». The Arabic pairs exist in `sources/raw-comments.png`, below the fold.
+
+Fix by re-ordering the fixtures so an Arabic pair leads, then re-run the shoot.
+`capture.js` asserts every card inside the crop carries an Arabic conversation and
+throws otherwise, so this cannot ship silently a second time.
+
+### 3. gallery-2 publishes its own latency
+
+The reply carries a «3377 مللي ثانية» badge. Reply speed is the product (Rule 17,
+D-049; measured p50 is 2.72 s), so a 3.4-second number on the storefront argues
+against us. Re-shoot against a warm ai-worker, or crop the badge.
 
 ## Two bugs the shoot found (both fixed in the same PR)
 

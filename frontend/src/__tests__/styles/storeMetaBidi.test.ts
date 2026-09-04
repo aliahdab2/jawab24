@@ -26,7 +26,14 @@ import { resolve } from 'node:path';
  *
  * Mutation checks (each must turn one of these red):
  *   - drop the <bdi> around the lastSync value
- *   - put `undefined` back as the toLocaleString locale
+ *   - pass `undefined` instead of `intlLocale` to formatTimestampDateTime
+ *
+ * The BROWSER-LOCALE half of this defect is pinned repo-wide in
+ * localeDateFormatting.test.ts — reviewing this fix found the same defect in
+ * LegalPageLayout and what-is-jawab24, which a single-file pin cannot see. What
+ * stays here is what is specific to this line: the <bdi>, and that the formatting
+ * goes through the shared dateUtils helper rather than a hand-rolled
+ * `new Date(...).toLocaleString(...)` that drops its null/NaN fallback.
  */
 
 const SOURCE = 'pages/integrations.tsx';
@@ -49,12 +56,12 @@ describe('connected-store card meta line', () => {
     ).toBe(true);
   });
 
-  it('formats dates in the app locale, never the browser default', () => {
+  it('formats the timestamp through dateUtils, in the app locale', () => {
     const src = code(SOURCE);
     expect(
-      src.includes('toLocaleString(undefined'),
-      "toLocaleString(undefined, …) formats in the browser's locale, not the app's — pass intlLocale",
-    ).toBe(false);
-    expect(src).toContain('toLocaleString(intlLocale');
+      src,
+      'the last-sync line no longer calls formatTimestampDateTime — a hand-rolled ' +
+        'new Date(...).toLocaleString(...) loses the null/NaN fallback and renders "Invalid Date"',
+    ).toContain('formatTimestampDateTime(store.lastSyncAt, intlLocale');
   });
 });

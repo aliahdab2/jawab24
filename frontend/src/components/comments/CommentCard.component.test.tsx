@@ -135,6 +135,37 @@ describe('CommentCard', () => {
     ).toBe('auto');
   });
 
+  it('applies the same dir="auto" to an Arabic reply that opens with a Latin product name', () => {
+    // The KNOWN COST of dir="auto", pinned so nobody "fixes" it later believing
+    // it is a bug. `auto` resolves from the FIRST STRONG character, so an Arabic
+    // reply opening with a Latin catalog product name — which the AI quotes
+    // verbatim, so this is routine, not hypothetical — resolves to LTR and lays
+    // the Arabic sentence out in an LTR paragraph.
+    //
+    // This is accepted, not overlooked: the incoming-comment field above and
+    // CommentDetailModal have made the same trade for longer, and one field
+    // behaving differently from its neighbours is worse than the trade itself.
+    // The alternative (server-side direction detection per reply) is a real
+    // change with its own review — see reference_rtl_multirun_value_reversal.
+    //
+    // ⚠️ jsdom does no bidi layout: this asserts the ATTRIBUTE is present and
+    // uniform, which is the invariant. It cannot and does not assert the
+    // painted order.
+    const replied: Comment = {
+      ...baseComment,
+      replied: true,
+      replyText: 'Nike Air Max متوفر بسعر 450 ريال، ومقاس M جاهز للشحن.',
+      replyMethod: 'ai',
+    };
+    render(<CommentCard {...defaultProps} comment={replied} />);
+    const bubble = screen.getByText('Nike Air Max متوفر بسعر 450 ريال، ومقاس M جاهز للشحن.');
+    expect(
+      bubble.getAttribute('dir'),
+      'the reply bubble must carry dir="auto" for EVERY reply — a field that isolates ' +
+        'some replies and not others is the drift this pin exists to prevent',
+    ).toBe('auto');
+  });
+
   describe('reply source indicator', () => {
     it('shows Smart Reply indicator for AI replies', () => {
       const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'ai' };

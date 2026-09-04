@@ -42,7 +42,10 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '../../../..');
-const { chromium } = require(path.join(REPO, 'node_modules/playwright'));
+const { chromium, expect } = require(path.join(REPO, 'node_modules/@playwright/test'));
+
+/** The marketing frame crops to roughly the first two comment cards. */
+const CROP_VISIBLE_CARDS = 2;
 
 const BASE = process.env.SHOT_BASE || 'http://localhost:3201';
 const API = process.env.SHOT_API || 'http://localhost:3200';
@@ -87,35 +90,99 @@ async function main() {
     }));
   }, API);
 
+  /**
+   * Shoot one screen — and REFUSE to shoot a wrong one.
+   *
+   * Every guard below replaces a comment that used to just describe the trap.
+   * Prose does not fail a build: on 2026-09-04 three separate traps each cost a
+   * capture round, and each was invisible until someone opened the PNG. A shoot
+   * that exits 0 on a spinner, a quota message, or a demo-shaped sidebar is not
+   * reproducible — it is repeatable, which is not the same thing.
+   */
   const shot = async (name, url, prepare) => {
     await page.goto(`${BASE}${url}`, { waitUntil: 'networkidle' });
     await page.addStyleTag({ content: HIDE });
-    await page.waitForTimeout(1500);
+
+    // The sidebar prints «مستخدم تجريبي» for any facebook_id starting with `demo_`
+    // (Sidebar.tsx → useIsDemoUser). stage.sh already fails on that, but the client
+    // reads a PERSISTED snapshot, so a stale localStorage can still paint it here.
+    await expect(page.getByText('مستخدم تجريبي')).toHaveCount(0);
+    // Same class: the demo banner keys off the same check (auth.demoBanner).
+    await expect(page.getByText('أنت في الوضع التجريبي')).toHaveCount(0);
+
     if (prepare) await prepare(page);
+
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(OUT, name) });
     console.log('captured', name);
   };
 
-  await shot('raw-stores.png', '/ar/integrations');
+  await shot('raw-stores.png', '/ar/integrations', async (p) => {
+    // The card must show a synced catalog. An unsynced store renders «المنتجات
+    // المزامنة: 0», which makes the caption («اربط متجرك … في دقيقة») a lie.
+    await expect(p.getByText('أزياء الخليج').first()).toBeVisible();
+    const meta = p.getByText(/المنتجات المزامنة:\s*\d+/).first();
+    await expect(meta).toBeVisible();
+    const count = Number((await meta.textContent()).match(/(\d+)/)[1]);
+    if (count < 1) throw new Error(`store shows ${count} synced products — sync it before shooting`);
+  });
 
   await shot('raw-comments.png', '/ar/comments', async (p) => {
     // Land on the auto-replied tab: the caption is «يرد على تعليقات فيسبوك وإنستغرام
     // تلقائياً», so the shot must show replies, not a backlog of unanswered comments.
     await p.locator('button', { hasText: 'تم الرد تلقائياً' }).first().click();
-    await p.waitForTimeout(1500);
+
+    // ⛔ The frame crops to the first two cards, and the seeder's ordering decides
+    // which two. On 2026-09-04 that put two ENGLISH conversations at the top of a
+    // shot captioned in Arabic, for the SAUDI Salla store — and the approved
+    // shot-list (.planning/SALLA_LISTING_BRIEF.md §4, shot 3) specifies an Arabic
+    // customer comment. Ordering is not something to hope for, so assert it.
+    // The card's own accessibility contract — role="button" + aria-label
+    // «فتح تعليق من {name}» (comments.openComment). Used in preference to a
+    // class selector, which would break on any restyle without saying so.
+    const cards = p.getByRole('button', { name: /^فتح تعليق من/ });
+    await expect(cards.first()).toBeVisible();
+    const visible = Math.min(await cards.count(), CROP_VISIBLE_CARDS);
+    for (let i = 0; i < visible; i++) {
+      const text = await cards.nth(i).innerText();
+      if (!/[\u0600-\u06FF]{4,}/.test(text)) {
+        throw new Error(
+          `comment card ${i + 1} of ${visible} inside the crop has no Arabic conversation. ` +
+          'The Salla listing needs Arabic pairs above the fold — re-order the fixtures ' +
+          'or widen the crop, do not ship this shot.',
+        );
+      }
+    }
   });
 
   await shot('raw-testreply.png', '/ar/pages', async (p) => {
     await p.locator('button', { hasText: 'اختبار الرد الذكي' }).first().click();
-    await p.waitForTimeout(1500);
     const box = p.locator('textarea').last();
+    await expect(box).toBeVisible();
     await box.fill('السلام عليكم، كم سعر العباية السوداء؟ وهل متوفر مقاس M؟');
     await p.keyboard.press('Enter');
-    // A real OpenAI round trip through the local ai-worker (~4 s observed; the wait
-    // is generous because a cold worker is slower than a warm one).
-    await p.waitForTimeout(20000);
+
+    // A REAL OpenAI round trip through the local ai-worker. Waiting on the reply
+    // itself rather than on a stopwatch: a fixed sleep shoots whatever is on screen
+    // when it expires, so a cold worker or a slow model silently produced a
+    // screenshot of a spinner.
+    // The BUBBLE only — deliberately not the whole message row, which also holds
+    // the latency badge. Reading the row would make the "quotes a number" check
+    // below vacuously true, since «3377 مللي ثانية» always contains digits.
+    const reply = p.getByTestId('test-reply-assistant-bubble').last();
+    await expect(reply).toBeVisible({ timeout: 60000 });
+    const text = (await reply.innerText()).trim();
+
+    // The caption claims the reply quotes real catalog prices. A quota wall, an
+    // empty reply or a refusal all render in this same bubble and all look like a
+    // successful shoot in the PNG.
+    if (!/\d/.test(text)) {
+      throw new Error(`reply quotes no number, so it cannot be quoting a price: ${text}`);
+    }
+    for (const bad of ['تم الوصول للحد الشهري', 'حدث خطأ', 'عذراً']) {
+      if (text.includes(bad)) throw new Error(`reply is an error/quota message, not an answer: ${text}`);
+    }
   });
 
   await browser.close();

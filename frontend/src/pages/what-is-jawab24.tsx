@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import { VersionStamp } from '@/components/layout/VersionStamp';
 
 interface FeatureSection {
   title: string;
@@ -419,13 +420,7 @@ export default function WhatIsJawab24() {
           </div>
 
           {/* Footer */}
-          <div className="mt-12 pt-8 border-t border-theme-border text-center">
-            <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} Jawab24 &bull; v{process.env.NEXT_PUBLIC_BUILD_TIME
-                ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleDateString()
-                : 'Dev'}
-            </p>
-          </div>
+          <VersionStamp />
         </div>
 
         {/* Fixed bottom safe area background */}

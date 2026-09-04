@@ -42,6 +42,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { useIsDemoUser } from '@/features/demo';
 import { computeFactCoverage } from '@/utils/businessCoverage';
+import { formatTimestampDateTime } from '@/utils/dateUtils';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 // Direct import, NOT the '@/hooks' barrel — public page.
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
@@ -376,16 +377,15 @@ function ConnectedStoreCard({
                     the wrong side. Same class as the Business facts list, same fix, and the
                     full rationale is written out at BusinessFactRows.tsx:205. Do not
                     "simplify" the <bdi> back to a bare span or drop the locale argument.
+                The formatting itself belongs to dateUtils — it carries the null/NaN
+                fallback this line used to lack, so a malformed timestamp falls back to
+                t('never') («لم يتم بعد») rather than rendering "Invalid Date".
                 ⚠️ jsdom does no bidi layout, so a unit test can assert the element but never
                 the painted order — that needs real Chrome. */}
             <p className="text-xs text-muted-foreground">
               {t('products')}: {store.productCount} &middot;{' '}
               {t('lastSync')}:{' '}
-              <bdi>
-                {store.lastSyncAt
-                  ? new Date(store.lastSyncAt).toLocaleString(intlLocale, { dateStyle: 'medium', timeStyle: 'short' })
-                  : t('never')}
-              </bdi>
+              <bdi>{formatTimestampDateTime(store.lastSyncAt, intlLocale, t('never'))}</bdi>
             </p>
           </div>
           <div className="flex gap-2">
