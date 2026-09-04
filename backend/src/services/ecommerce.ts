@@ -45,7 +45,7 @@ export interface WebhookRegistrationResult {
      * body for `product.*` but has never done so for `order.*`, which either
      * means the cap is not per-event or means those subscriptions are being
      * re-created (duplicated) on every attempt — a merchant-visible difference
-     * (duplicate order SMS / cart nudges) that nothing recorded. A topic present
+     * (duplicate order notifications / cart nudges) that nothing recorded. A topic present
      * in `registered` and absent here returned 2xx; present here, it already
      * existed. Diagnostic only: nothing branches on it.
      */
