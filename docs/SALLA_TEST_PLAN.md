@@ -311,15 +311,24 @@ design does not name.** Two real consequences:
 - in `reconcileSallaBilling` the throw lands in the per-store `catch` → `result.errors++` +
   `log.warn`, so such stores count as sweep **errors**, not as "nobody is paying".
 
-✅ It never wrongly revokes — the throw writes nothing — so this does **not** block Submit.
+✅ It never wrongly revokes — the throw writes nothing — so this did **not** block Submit.
 
-⛔⭐ **Do NOT "fix" it by mapping 404 → `none` yet.** What a 404 *means* is unproved. Ruled out:
-bad token and wrong app id (the same token synced 20 products; `SALLA_APP_ID` is armed). Still
-open: (a) no subscription resource exists ⇒ 404, or (b) `/admin/v2/apps/{id}/subscriptions` is
-unavailable while the app is in Development. Telling them apart needs a store **with** a paid
-subscription, and an unpublished app has no paid checkout — i.e. not before publish, for the same
-reason 3.11.2–3.11.5 wait. If (b) is the truth, mapping 404 → `none` would **pause paying
-merchants** the day after publish. Classify it explicitly as its own outcome instead, or defer.
+✅ **FIXED — the 404 is now CLASSIFIED, not thrown (`sallaBilling.ts`, this same worktree's follow-up
+PR).** `fetchSallaAppSubscription` catches an `EcommerceApiHttpError` with `status === 404` and
+returns a new read kind `endpoint_unavailable`; `syncSallaBilling` handles it beside the
+`unreadable` guard (before the pause path), logs at **info**, and returns outcome
+`endpoint_unavailable` with `changed:false`. So: no more level-50 Sentry error on every unsubscribed
+install, and the reconciler no longer counts these stores as `errors`. Entitlement behaviour is
+**byte-identical** to the throw (both write nothing) — the only change is error → quiet outcome.
+Every OTHER status (401, 5xx, network) still rethrows and reaches the callers' error path, as before.
+
+⛔⭐ **The classification is deliberately AMBIGUITY-PRESERVING — do NOT collapse it to `none`.** A 404
+still means EITHER (a) no subscription resource exists, or (b) `/admin/v2/apps/{id}/subscriptions` is
+unavailable while the app is unpublished — and the two are indistinguishable until a paid
+subscription is observable post-publish (needs a store **with** a subscription; an unpublished app
+has no paid checkout, same reason 3.11.2–3.11.5 wait). `endpoint_unavailable` writes nothing for
+exactly this reason: reading it as `none` would **pause paying merchants** the day after publish if
+(b) is the truth. ⏭ Revisit the classification once publish makes the 404 meaning knowable.
 | 3.11.2 | Subscribe the reviewer/demo store to **الأعمال** inside Salla | `app.subscription.started` 200 → a verify runs → `subscriptions` row `payment_method='salla'`, `salla_store_id` set, plan = business, `current_period_end` = Salla's `end_date` | `unknown_plan` ⇒ the wizard's plan name/price does not match `config/sallaBilling.ts` — fix the map, never the guess. `unknown_state` ⇒ `end_date` arrived in a shape `parseDate` rejects: capture it verbatim |
 | 3.11.3 | Confirm the trial reads as a trial | during the 14-day trial the row is `status='trialing'` with `trial_ends_at` = `end_date` | Reads `active` instead ⇒ the null-price trial heuristic is wrong for Salla; both entitle, so fix the label, do not panic |
 | 3.11.4 | Stripe surfaces are suppressed for that merchant | plan select / top-up / checkout all refuse with **400 `SALLA_BILLED`**, and the UI shows the managed-billing banner instead of a CTA | A Stripe CTA reachable ⇒ Article-5 breach; stop and fix before the reviewer sees it |

@@ -4,6 +4,7 @@ import { and, eq, desc, inArray, notInArray } from 'drizzle-orm';
 import { subscriptionsService } from './subscriptions';
 import { plansService } from './plans';
 import { sallaApiGet, resolveStoreCredentials } from './salla';
+import { EcommerceApiHttpError } from '../utils/httpRetry';
 import { mapSallaPlanToSlug, parseSallaPrice } from '../config/sallaBilling';
 import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { collidesWithLiveRail } from '../config/billingRails';
@@ -117,7 +118,18 @@ export type SallaSubscriptionRead =
     /** Salla POSITIVELY reported no base-plan subscription. */
     | { kind: 'none' }
     /** A 200 we could not parse. Never treated as "no subscription". */
-    | { kind: 'unreadable'; reason: string };
+    | { kind: 'unreadable'; reason: string }
+    /**
+     * Salla's subscription endpoint answered 404. AMBIGUOUS by design: it means
+     * EITHER no subscription resource exists for this store, OR the endpoint is
+     * unavailable while the app is unpublished (Development) — and the two cannot
+     * be distinguished until a paid subscription is observable post-publish
+     * (SALLA_TEST_PLAN.md 3.11.1). So this is NOT `none`: reading it as "nobody is
+     * paying" would pause a live mirror if the truth is "endpoint absent". Write
+     * nothing, stay quiet (it is the expected state for every unsubscribed store),
+     * and revisit the classification once publish makes the 404 meaning knowable.
+     */
+    | { kind: 'endpoint_unavailable'; status: number };
 
 /**
  * Fields only a subscription entry carries — used to keep a defensive foothold
@@ -163,10 +175,22 @@ function parseSubscriptionEntry(entry: Record<string, unknown>): SallaAppSubscri
 export async function fetchSallaAppSubscription(
     accessToken: string,
 ): Promise<SallaSubscriptionRead> {
-    const raw = await sallaApiGet<Record<string, unknown>>(
-        `https://api.salla.dev/admin/v2/apps/${encodeURIComponent(config.salla.appId)}/subscriptions`,
-        accessToken,
-    );
+    let raw: Record<string, unknown>;
+    try {
+        raw = await sallaApiGet<Record<string, unknown>>(
+            `https://api.salla.dev/admin/v2/apps/${encodeURIComponent(config.salla.appId)}/subscriptions`,
+            accessToken,
+        );
+    } catch (err) {
+        // A 404 is a KNOWN, quiet state (see the `endpoint_unavailable` doc), not a
+        // failure — classify it so the caller writes nothing without logging an
+        // error. Every OTHER status (401 dead token, 5xx, network) is a genuine
+        // failure the caller's catch must still see, so rethrow it unchanged.
+        if (err instanceof EcommerceApiHttpError && err.status === 404) {
+            return { kind: 'endpoint_unavailable', status: err.status };
+        }
+        throw err;
+    }
 
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
         // A bare array body is tolerated below; anything else is unreadable.
@@ -216,6 +240,7 @@ export type SallaBillingSyncOutcome =
     | 'non_entitling_plan' // a known free plan shape — grants nothing, skipped silently
     | 'unknown_state'      // entitlement underivable (no usable end_date) — fail loud, no write
     | 'unreadable'         // a 200 we could not parse — fail loud, NEVER read as "no subscription"
+    | 'endpoint_unavailable' // Salla answered 404 — write nothing, stay quiet (NEVER pause); see the read type
     | 'paused'             // Salla shows no live subscription; live local mirror paused
     | 'no_subscription'    // nothing on either side — nothing to do
     | 'no_store';          // no active salla store row / no usable credentials / rail dormant
@@ -537,6 +562,22 @@ export async function syncSallaBilling(
         return { outcome: 'unreadable', changed: false };
     }
 
+    // A 404 from the subscriptions endpoint is the expected state for every
+    // unsubscribed store (and for the whole app while it is unpublished), so it
+    // must NOT reach the pause fallthrough below and must NOT be logged as an
+    // error — that was the pre-fix behaviour (the fire-and-forget callers logged
+    // the thrown 404 at error level on every install, and the reconciler counted
+    // it as a sweep error). Write nothing, log at info, move on. Placed here — with
+    // the `unreadable` guard, before the pause path — so it can never revoke a
+    // paying merchant's entitlement.
+    if (read.kind === 'endpoint_unavailable') {
+        log.info(
+            { storeId, status: read.status },
+            'Salla subscriptions endpoint returned 404 — no subscription readable; writing nothing',
+        );
+        return { outcome: 'endpoint_unavailable', changed: false };
+    }
+
     // Anything that is not a POSITIVELY-derived "no longer entitled" goes to
     // adopt — which owns the activation, the non-entitling skip, and the
     // fail-loud paths. Only a state we positively understand as inactive may
@@ -614,6 +655,10 @@ export async function reconcileSallaBilling(options?: {
         try {
             const sync = await syncSallaBilling(store.id, log);
             if (sync.changed) result.healed++;
+            // `endpoint_unavailable` (404) is deliberately NOT flagged: it is the
+            // expected state for every unsubscribed store, so flagging it would
+            // re-create the very noise this classification removed. Before the fix
+            // the 404 threw and landed in the catch below as an `errors++`.
             if (
                 sync.outcome === 'refused'
                 || sync.outcome === 'unknown_plan'

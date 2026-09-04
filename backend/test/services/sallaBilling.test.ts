@@ -88,6 +88,7 @@ import {
 import { db } from '../../src/db';
 import { subscriptionsService } from '../../src/services/subscriptions';
 import { q, mkLog } from '../helpers/drizzleQueryMock';
+import { EcommerceApiHttpError } from '../../src/utils/httpRetry';
 
 const STORE = 'store-uuid-1';
 
@@ -301,6 +302,31 @@ describe('fetchSallaAppSubscription', () => {
         const result = await fetchSallaAppSubscription('t');
 
         expect(result.kind === 'subscription' && result.subscription.planName).toBe('الاحترافي');
+    });
+
+    /**
+     * A 404 is a KNOWN quiet state (no subscription resource, or the endpoint is
+     * absent while the app is unpublished — indistinguishable pre-publish), NOT a
+     * failure. It must be classified so the caller writes nothing without logging
+     * an error; it must never be read as `none`, which would pause a live mirror.
+     */
+    it('classifies a 404 as endpoint_unavailable, not a throw and not "none"', async () => {
+        mockApiGet.mockRejectedValue(new EcommerceApiHttpError('salla', 404));
+
+        await expect(fetchSallaAppSubscription('t')).resolves.toEqual({
+            kind: 'endpoint_unavailable', status: 404,
+        });
+    });
+
+    /**
+     * ONLY 404 is quiet. Every other status is a genuine failure the caller's
+     * catch must still see — a 401 is a dead token, a 5xx is Salla down. Swallowing
+     * them would hide real breakage, so the fetch must rethrow them unchanged.
+     */
+    it('rethrows a non-404 HTTP error (401) instead of swallowing it', async () => {
+        mockApiGet.mockRejectedValue(new EcommerceApiHttpError('salla', 401));
+
+        await expect(fetchSallaAppSubscription('t')).rejects.toMatchObject({ status: 401 });
     });
 });
 
@@ -639,6 +665,28 @@ describe('syncSallaBilling', () => {
             expect.anything(), expect.any(String),
             expect.objectContaining({ fingerprint: ['salla-billing-unreadable-response'] }),
         );
+    });
+
+    /**
+     * A 404 from the subscriptions endpoint must reach the quiet
+     * endpoint_unavailable path, NOT the pause below and NOT the error-level
+     * captureError — that was the pre-fix behaviour (a thrown 404 logged at error
+     * on every unsubscribed install). Same invariant as `unreadable`: it must
+     * write nothing so it can never revoke a paying merchant's entitlement.
+     */
+    it('reports endpoint_unavailable on a 404 — never pauses, never alerts', async () => {
+        vi.mocked(db.select).mockReturnValue(q([activeStoreRow]) as never);
+        // A live mirror EXISTS — if the 404 wrongly reached the pause path it would
+        // cancel this row. It must not.
+        vi.mocked(db.update).mockReturnValue(q([{ id: 'row_1', userId: 'u1' }]) as never);
+        mockApiGet.mockRejectedValue(new EcommerceApiHttpError('salla', 404));
+
+        const result = await syncSallaBilling(STORE, mkLog());
+
+        expect(result).toEqual({ outcome: 'endpoint_unavailable', changed: false });
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(mockCaptureError).not.toHaveBeenCalled();
     });
 
     /**
