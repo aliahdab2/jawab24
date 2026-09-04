@@ -70,10 +70,12 @@ const MOCK_PAGES = [
 ];
 
 function setupAuth(page: import('@playwright/test').Page, locale: 'en' | 'ar' = 'en') {
-  // The integrations page is admin-only while we finish public roll-out
-  // (Shopify App Store listing pending, Salla/Zid backend reliability gap).
-  // The test user is flagged as admin so the page-level guard doesn't
-  // redirect away from /integrations during the test run.
+  // `isAdmin` is NOT load-bearing here any more. This page was admin-only during
+  // the public roll-out and the guard redirected every non-admin to /dashboard;
+  // that guard came off 2026-09-04 (owner ruling, #1048) and nothing on
+  // pages/integrations.tsx reads `user.isAdmin` today. The flag stays only so the
+  // fixture keeps describing one consistent user — reaching the page no longer
+  // depends on it, and a non-admin fixture would render this page identically.
   //
   // The `language` in ui-storage MUST match the URL locale. _app.tsx has a
   // sync effect (lines 167-173) that redirects to the store's language when
