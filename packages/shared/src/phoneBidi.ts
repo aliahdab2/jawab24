@@ -26,8 +26,17 @@
  * skips the already-isolated span (its `LRI` guard) and still repairs everything
  * else (prices, ranges, a non-merchant number). Local string work only — no
  * network, no model, no cache key touched (it runs on the OUTGOING text).
+ *
+ * ⛔ NEVER INSIDE A URL. A merchant's number reaches a reply twice as often as it
+ * looks: once bare and once inside their own `https://wa.me/<number>` line — 4 such
+ * replies in 120 days of prod, on a live page. An isolate spliced into a link is not
+ * cosmetic: measured in Chrome 2026-09-04, `https://wa.me/963989811511` paints as
+ * `963989811511/https://wa.me`, and the invisible U+2066/U+2069 travel with a
+ * copy-paste and 404 the deep link — so the repair would kill the exact contact
+ * channel it was published to help with. Both isolators therefore go through
+ * `isolateOutsideProtectedRuns`; never run `findPhoneSpans` on raw reply text.
  */
-import { LRI, PDI, RTL_LETTER } from './bidi';
+import { LRI, PDI, RTL_LETTER, isolateOutsideProtectedRuns } from './bidi';
 import { findPhoneSpans, samePhoneNumber } from './utils/validation';
 
 /**
@@ -39,19 +48,26 @@ import { findPhoneSpans, samePhoneNumber } from './utils/validation';
  */
 export function isolateKnownPhones(text: string, knownPhones: string[]): string {
     if (!text || knownPhones.length === 0 || !RTL_LETTER.test(text)) return text;
+    // Segment first: a number inside a URL or an email address must come back
+    // byte-identical (see the module header), so it is never offered as a span.
+    return isolateOutsideProtectedRuns(text, (segment) =>
+        isolatePhonesInSegment(segment, knownPhones),
+    );
+}
 
-    const spans = findPhoneSpans(text).filter(
+function isolatePhonesInSegment(segment: string, knownPhones: string[]): string {
+    const spans = findPhoneSpans(segment).filter(
         (s) =>
             // Not already wrapped by a previous pass.
-            text[s.start - 1] !== LRI &&
+            segment[s.start - 1] !== LRI &&
             // This span IS one of the merchant's own lines (matched by digits, so
             // it hits however the model spelled it) — never an order id or a price.
             knownPhones.some((p) => samePhoneNumber(p, s.raw)),
     );
-    if (spans.length === 0) return text;
+    if (spans.length === 0) return segment;
 
     // Splice from the LAST span backwards so earlier offsets stay valid.
-    let out = text;
+    let out = segment;
     for (const s of spans.sort((a, b) => b.start - a.start)) {
         out = out.slice(0, s.start) + LRI + out.slice(s.start, s.end) + PDI + out.slice(s.end);
     }
