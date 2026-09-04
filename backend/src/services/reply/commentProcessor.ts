@@ -12,7 +12,7 @@ import { UNINVITED_SYMBOL_SKIP, type UninvitedSymbolSkip } from './commentCta';
 import { contentCtaClassifier } from '../contentCtaClassifier';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn } from '@jawab24/shared';
+import { resolveEffectiveReplyMode, toReplyMode, unwrapBusinessProfile, hasRoutableContactChannel, isIdentityVerificationTurn, knownContactPhones } from '@jawab24/shared';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { isDemoPlatformId } from '../../utils/demo';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -870,7 +870,12 @@ export class CommentProcessor {
             }
 
             // 9a. Render the canonical reply for this channel (see MessagePlatformAdapter.renderReply).
-            replyText = adapter.renderReply(replyText);
+            // Pass the merchant's own numbers so a spaced phone quoted in the reply is
+            // bidi-isolated in place (Arabic RTL would otherwise paint it backwards).
+            replyText = adapter.renderReply(
+                replyText,
+                knownContactPhones(page.businessProfile as Parameters<typeof knownContactPhones>[0]),
+            );
 
             // 9b. Enforce max length for public comment replies (280 chars, tweet-length)
             // Skip truncation for dual/private modes — the reply is sent as a DM where length is fine.

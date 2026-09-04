@@ -82,7 +82,7 @@ const NUMERIC_TOKEN = new RegExp(
 const FRAGILE = /[+\-%$\u20AC\u00A3\u00A5\u20AA\u20BA\uFDFC\u066A]/;
 
 /** Any strong right-to-left letter — Arabic, Hebrew, Syriac, Thaana and their presentation forms. */
-const RTL_LETTER =
+export const RTL_LETTER =
     /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0780-\u07BF\u0860-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
 
 /**

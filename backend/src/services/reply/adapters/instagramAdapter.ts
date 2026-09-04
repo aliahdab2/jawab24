@@ -95,8 +95,8 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         await instagramService.sendTypingOff(page.platformAccountId, senderId, instagramCredentialOf(page));
     }
 
-    renderReply(text: string): string {
-        return renderReplyForChannel(text, 'plain');
+    renderReply(text: string, knownPhones?: string[]): string {
+        return renderReplyForChannel(text, 'plain', knownPhones);
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {

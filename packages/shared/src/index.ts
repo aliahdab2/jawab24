@@ -3,7 +3,7 @@
 import type { MerchantProvenanceMap } from './businessProfileMerge';
 import type { PresentFields } from './catalogKbMatch';
 import { matchStructuredFieldLinesInKb } from './catalogKbMatch';
-import { businessPhoneList } from './businessInfoPrompt';
+import { businessPhoneList, whatsappNumbers } from './businessInfoPrompt';
 import type { BusinessPhone } from './businessPhone';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
@@ -132,6 +132,7 @@ export type { ReplyRenderTarget } from './replyFormatting';
 // --- Bidi repair for numbers written inside RTL text (see bidi.ts) ---
 // Callers that MATCH against a delivered reply must normalise with stripBidiMarks first.
 export { stripBidiMarks } from './bidi';
+export { isolateKnownPhones } from './phoneBidi';
 
 // --- SSE Event Types ---
 export * from './sse-events';
@@ -395,6 +396,19 @@ export function presentFieldsFromProfile(stored: StoredBusinessProfile): Present
     phone: phoneNumbers.length > 0,
     hours: !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0),
   };
+}
+
+/**
+ * The merchant's own reachable numbers — call lines + WhatsApp — for a caller
+ * that must FIND them in delivered text (RTL isolation of a quoted number; see
+ * `isolateKnownPhones`). Reads the confirmed `merchant` half, matching what the
+ * BUSINESS_INFO block publishes, so it lists exactly the numbers a reply can
+ * quote. A listed number that is not actually in the reply simply never matches,
+ * so an over-broad list is harmless.
+ */
+export function knownContactPhones(stored: StoredBusinessProfile): string[] {
+  const { merchant = {} } = unwrapBusinessProfile(stored);
+  return [...businessPhoneList(merchant), ...whatsappNumbers(merchant)];
 }
 
 /**

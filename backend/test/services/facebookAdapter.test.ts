@@ -202,3 +202,21 @@ describe('FacebookMessageAdapter — typing indicator', () => {
         expect(facebookService.sendTypingIndicator).not.toHaveBeenCalled();
     });
 });
+
+describe('FacebookMessageAdapter.renderReply — forwards knownPhones to the isolator', () => {
+    const adapter = new FacebookMessageAdapter();
+
+    it('isolates a merchant number passed as knownPhones (a spaced number would paint backwards without it)', () => {
+        const LRI = '⁦';
+        const PDI = '⁩';
+        const out = adapter.renderReply('تواصل معنا على +46 70 022 47 20 مباشرة', ['+46 70 022 47 20']);
+        expect(out).toBe(`تواصل معنا على ${LRI}+46 70 022 47 20${PDI} مباشرة`);
+    });
+
+    it('leaves the number untouched when no knownPhones are forwarded', () => {
+        const out = adapter.renderReply('تواصل معنا على +46 70 022 47 20 مباشرة');
+        // Only the "+46" fragment is isolated by isolateNumericTokens — the whole-number
+        // repair is exactly what the knownPhones argument adds.
+        expect(out).toBe('تواصل معنا على ⁦+46⁩ 70 022 47 20 مباشرة');
+    });
+});

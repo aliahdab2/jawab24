@@ -59,8 +59,8 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         // this hook would fire, which is what perceived latency needs.
     }
 
-    renderReply(text: string): string {
-        return renderReplyForChannel(text, 'whatsapp');
+    renderReply(text: string, knownPhones?: string[]): string {
+        return renderReplyForChannel(text, 'whatsapp', knownPhones);
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {

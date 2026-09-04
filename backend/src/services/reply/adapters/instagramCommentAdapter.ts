@@ -107,8 +107,8 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         };
     }
 
-    renderReply(text: string): string {
-        return renderReplyForChannel(text, 'plain');
+    renderReply(text: string, knownPhones?: string[]): string {
+        return renderReplyForChannel(text, 'plain', knownPhones);
     }
 
     async sendReply(opts: {
