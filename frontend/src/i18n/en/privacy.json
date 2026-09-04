@@ -49,7 +49,7 @@
   "ecommerceText": "When you connect a Shopify, Salla, or Zid store, the following applies in addition to the general data-handling sections above:",
   "ecommerceItem1": "Encrypted Tokens: We store your store's access and refresh tokens encrypted at rest (AES-256-GCM). Tokens are decrypted only at the moment of an outbound API call.",
   "ecommerceItem2": "Catalog Sync: Product data is synced into our database to power AI replies. We do not share catalog data with third parties beyond the AI provider used to generate replies.",
-  "ecommerceItem3": "Customer Data Minimization: For each customer, we store only what is needed to deliver the configured features (e.g. phone for SMS notifications, social ID for DM mapping). We do not collect payment details, full addresses, or store-side customer profiles.",
+  "ecommerceItem3": "Customer Data Minimization: For each customer, we store only what is needed to deliver the configured features (e.g. phone for WhatsApp order notifications, social ID for DM mapping). We do not collect payment details, full addresses, or store-side customer profiles.",
   "ecommerceItem4": "Webhook Data: We receive webhook events (orders, products, app uninstall, GDPR) and process them solely to keep the integration current and to deliver merchant-configured notifications.",
   "ecommerceItem5": "Disconnection and Deletion: When you disconnect a store or uninstall the app from the store's admin, we mark the store inactive, stop processing its webhooks, and delete its synced data on request.",
   "ecommerceItem6": "Shopify GDPR Endpoints: For Shopify stores, we honor Shopify's mandatory GDPR webhooks (customers/data_request, customers/redact, shop/redact) per Shopify Partner Program requirements.",
