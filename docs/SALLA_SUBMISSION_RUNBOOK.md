@@ -194,13 +194,15 @@ submission happens on the production app.
       `SALLA_EASY_MODE_CLAIM_ENABLED`.
 - [ ] **Marketing sign-off** on listing copy §1–2 (`.planning/SALLA_LISTING_BRIEF.md` — honesty
       pass done 2026-07-05; sales-rep frame per D-014, no transact verbs, no "AI agent").
-- [ ] **Designer assets produced** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
-      exactly **3 App Gallery images @ 1366×768**, exactly **3 Key Benefits images @ 1600×1600**
-      (each with title + description), **icon 512×512** PNG/JPEG ≤1MB (symbol-only, margin),
-      optional **YouTube link ≤2 min**. Include a WhatsApp screenshot — the copy claims it.
-      **Usable drafts EXIST at `docs/store-listing/salla/`** (real AR app UI, verified specs,
-      AR/EN benefit copy in `benefits.md`) — founder review pending; a designer pass is
-      optional polish, not a blocker.
+- [x] **Assets produced and RE-SHOT 2026-09-04** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
+      3 App Gallery images @ 1366×768, 3 Key Benefits images @ 1600×1600, icon 512×512 —
+      all at `docs/store-listing/salla/`, all real Arabic app UI. The re-shoot replaced the
+      dev-fixture names («Test User», «Test Page», «متجر تجريبي») with one realistic Salla
+      merchant, per the owner's 2026-09-03 decision, and the shoot is now reproducible from
+      `sources/capture.js` with the raw captures committed beside it. ⏭ Founder eyeball still
+      owed; a designer pass is optional polish, not a blocker.
+      ⏭ Still open: the optional **YouTube link ≤2 min** (only if the wizard enforces the
+      Educational Video field — test that first, see Phase 2 step 1).
 - [x] **Support inbox live** — `support@jawab24.com`, settled and confirmed 2026-09-03 (owner).
       Verified against live DNS: Namecheap forwarding MX (`eforward{1..5}.registrar-servers.com`)
       + matching SPF; the alias forwards to a monitored inbox. ⚠️ The "MX absent" line in the
@@ -286,6 +288,8 @@ submission happens on the production app.
 - [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
 - [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
+      (the images themselves are READY — `docs/store-listing/salla/gallery-{1,2,3}.png`,
+      re-shot 2026-09-04; what is left is the portal sitting that uploads them)
 - [ ] A real Salla store connected end-to-end — install + token push + claim ✅ 2026-08-23 (demo
       store, D-093) — **but the store row was later DELETED (discovered 2026-08-30) and the 08-23
       21:30 re-push expired unclaimed.** Rebuild: *Reauthorize App* in the demo-store admin →

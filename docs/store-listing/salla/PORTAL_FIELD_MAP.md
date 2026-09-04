@@ -354,14 +354,17 @@ read which fields the validator actually names, rather than inferring the blocki
 
 بعد تسجيل الدخول بالبيانات أعلاه:
 
-1. افتح الرابط https://jawab24.com/salla/onboarding ثم اضغط «ابدأ» — ستظهر رسالة
-   «تم ربط المتجر» مع اسم المتجر التجريبي، وتبدأ مزامنة المنتجات تلقائياً حتى تظهر
-   «تمت مزامنة N منتج» (المنتجات والأسعار تُقرأ مباشرةً من سلة).
-2. توقّف عند هذه الخطوة ولا تضغط «ربط صفحة» — الصفحة مرتبطة مسبقاً.
-3. من صفحة «الإعدادات» اختر صفحة «<اسم الصفحة المرتبطة بمتجر سلة>» ثم افتح «اختبار الرد
-   الذكي» واكتب سؤالاً مثل: «كم سعر ...؟» — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي
-   من كتالوج المتجر. (ملاحظة: الحساب يحوي صفحة ثانية مرتبطة بمتجر آخر لأغراض الاختبار؛
-   يُرجى استخدام الصفحة المذكورة أعلاه.)
+1. افتح الرابط https://jawab24.com/salla/onboarding ثم اضغط «ابدأ الآن» — ستظهر رسالة
+   «تم ربط المتجر!» مع اسم المتجر، ثم تبدأ مزامنة المنتجات تلقائياً حتى تظهر
+   «تمت مزامنة N منتج» (المنتجات والأسعار تُقرأ مباشرةً من سلة). وإن ظهرت رسالة
+   «فشلت مزامنة المنتجات» فاضغط «إعادة المزامنة»؛ منتجات المتجر مزامَنة مسبقاً على أي حال،
+   ويمكنكم متابعة الخطوة التالية.
+2. توقّف عند هذه الخطوة ولا تضغط «ربط صفحاتك الاجتماعية» — الصفحة مرتبطة مسبقاً.
+3. من القائمة الجانبية افتح «قنوات التواصل»، ثم على بطاقة صفحة
+   «<اسم الصفحة المرتبطة بمتجر سلة>» اضغط «اختبار الرد الذكي» واكتب سؤالاً مثل:
+   «كم سعر ...؟» — سيأتي الرد مقتبساً اسم المنتج وسعره الحقيقي من كتالوج المتجر.
+   (ملاحظة: الحساب يحوي صفحة ثانية مرتبطة بمتجر آخر لأغراض الاختبار؛ يُرجى استخدام
+   الصفحة المذكورة أعلاه.)
 
 جواب24 تطبيق يعمل خارج واجهة المتجر: يقرأ منتجات المتجر وأسعارها ليجيب عملاءكم على
 واتساب وفيسبوك وإنستغرام. لا يضيف أي عنصر إلى واجهة المتجر ولا يعدّل عليها.
@@ -369,8 +372,27 @@ read which fields the validator actually names, rather than inferring the blocki
 لأي استفسار: support@jawab24.com
 ```
 
-⚠️ The instructions describe steps 1–3 exactly as the app behaves today; re-check them against the
-build in production before submitting, since the reviewer will follow them literally.
+⭐⭐ **Every label above was WALKED in a running build on 2026-09-04** — the local worktree
+stack, Arabic UI, signed in as a merchant-shaped account — because the reviewer follows the
+text literally and the previous draft carried three literal mismatches:
+
+| The old text said | What the app actually shows |
+|---|---|
+| press «ابدأ» | the button reads **«ابدأ الآن»** |
+| don't press «ربط صفحة» | the button reads **«ربط صفحاتك الاجتماعية»** |
+| «من صفحة «الإعدادات» اختر صفحة …» | the reply tester is on **«قنوات التواصل»** (`/pages`), not «الإعدادات» (`/settings`) — and the nav label for `/pages` is «قنوات التواصل», not the older «إدارة الصفحات» the 2026-07 screenshots still showed |
+
+⛔ A fourth finding, and the reason step 1 now carries an escape hatch: pressing «ابدأ الآن»
+renders «تم ربط المتجر!» and then **either** «تمت مزامنة N منتج» **or** a red
+«فشلت مزامنة المنتجات. يرجى المحاولة مجدداً.» with an «إعادة المزامنة» button. A sync that
+fails on the reviewer's run — an expired token, a Salla rate limit — makes a red error the
+first thing they see, while the instructions promise a success line. The sync is not
+load-bearing for the test (the catalog is already synced by then), so the text now says so
+instead of leaving the reviewer stuck on an error the app expects to recover from.
+
+⚠️ These are frontend copy strings and they drift — «إدارة الصفحات» → «قنوات التواصل» happened
+between the last two shoots. Re-walk steps 1–3 **as the review account, in production**, before
+pressing Submit.
 
 > This same demo store is what Tier 3 of `docs/SALLA_TEST_PLAN.md` needs — including the
 > `track_shipment` gate that has never been run. Create it once, use it for both.
