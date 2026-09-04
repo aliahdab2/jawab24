@@ -421,6 +421,14 @@ class SyncOutcome {
     }
 }
 
+/**
+ * The shape both sync-producing routes hand to `toClientSyncOutcome`. Exported
+ * as a type so `lib/pageSyncOutcome` can consume it WITHOUT importing this
+ * module at runtime — controller tests mock `services/pages` wholesale, and a
+ * runtime import of the mapper from here would vanish with the rest of it.
+ */
+export type SyncFromFacebookResult = ReturnType<SyncOutcome['toResponse']>;
+
 export class PagesService {
     private logger: Logger = noopLogger;
     /**

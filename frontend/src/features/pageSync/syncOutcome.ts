@@ -1,62 +1,64 @@
 /**
- * Page-sync outcome reporting — the single place that turns a `POST /pages/sync`
- * response into merchant-visible messages.
+ * Page-sync outcome reporting — the single place that turns a refusal-carrying
+ * sync outcome into merchant-visible messages.
  *
- * Why this is a module and not a block inside `pages.tsx`: the backend answers a
- * sync with several "we did NOT connect that page, and here is why" outcomes
- * (`skippedPages` / `takenPages` / `trialBlockedPages` / `alreadyMemberOf`). For
- * a long time only `pages.tsx` knew how to read them, so the SECOND caller — the
- * Facebook reconnect leg in `auth/callback.tsx` — discarded the whole body, and
- * the merchant was left with fewer pages than they granted and no reason given
- * (observed 2026-09-03: a Starter workspace at `max_pages = 1` reconnected, the
- * backend correctly refused the second page with `skipReason: 'page_limit'`, and
- * nothing was ever shown).
+ * The backend answers a sync with several "we did NOT connect that page, and
+ * here is why" outcomes (`skippedPages` / `takenPages` / `trialBlockedPages` /
+ * `alreadyMemberOf`). Two routes produce them — `POST /pages/sync` and, as a
+ * side effect of linking, `POST /auth/facebook/link`.
  *
- * Keeping the interpretation here means a caller gets the explanation by
- * construction rather than by remembering to write it again.
+ * ⚠️ Reporting happens on ONE page: `/pages`. The Facebook reconnect legs in
+ * `auth/callback.tsx` do NOT render these messages — they hand the outcome over
+ * with `stashPageSyncOutcome` and `/pages` reports it on arrival. That is
+ * deliberate and load-bearing:
+ *
+ *  - the callback redirects to `/pages` under `finalLocale` (the ACCOUNT's
+ *    language), which can differ from the locale the callback itself rendered
+ *    in — reporting there produced an Arabic toast on an English page, inside an
+ *    LTR Toaster;
+ *  - the workspace store is not usable mid-auth, so the "Switch to ‹X›" action
+ *    could not be offered at all;
+ *  - and it keeps the 15–21 kB `pages` namespace off `/auth/callback`, which
+ *    every Facebook login passes through to render a skeleton.
  */
 import { toast } from 'sonner';
-import type { NoPagesReason } from '@jawab24/shared';
+import type { PageSyncOutcome } from '@jawab24/shared';
 
-export type PageSyncResponse = {
-    reason?: NoPagesReason | null;
-    takenCount?: number;
-    takenPages?: { pageName: string }[];
-    alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
-    trialBlockedCount?: number;
-    skippedCount?: number;
-    skippedPages?: { pageName: string }[];
-    skipReason?: 'subscription_inactive' | 'page_limit';
-    pageLimit?: number | null;
-};
+export type { PageSyncOutcome };
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
 export type ReportPageSyncDeps = {
-    /** `useTranslations('pages')` — callers must load the `pages` namespace. */
+    /** `useTranslations('pages')`. */
     t: Translate;
     /** Active locale, for `Intl.ListFormat` page-name joining. */
     locale: string;
-    /**
-     * Offered as a one-tap action when the conflicting pages sit in a workspace
-     * the user already belongs to. Omit where switching isn't possible (e.g.
-     * mid-auth, before the workspace store is usable) and the toast degrades to
-     * a plain warning rather than offering an action that cannot work.
-     */
-    onSwitchWorkspace?: (workspaceId: string) => void;
+    /** Offered as a one-tap action when the conflicting pages sit in a workspace the user already belongs to. */
+    onSwitchWorkspace: (workspaceId: string) => void;
 };
 
-const joinNames = (names: string[], locale: string): string =>
-    new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names);
+/**
+ * Join page names for prose. Falls back to a plain comma list rather than
+ * throwing: `Intl.ListFormat` raises `RangeError` on a locale tag it cannot
+ * parse, and losing the whole explanation over a formatting detail is exactly
+ * the silence this module exists to end.
+ */
+const joinNames = (names: string[], locale: string): string => {
+    try {
+        return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names);
+    } catch {
+        return names.join(', ');
+    }
+};
 
 /**
- * Surface every "not connected" outcome carried by a sync response.
+ * Surface every "not connected" outcome carried by a sync.
  *
  * Every message is `duration: Infinity` — each explains something the merchant
  * must act on (upgrade, subscribe, switch workspace), so it must not expire
  * before being read.
  */
-export function reportPageSyncOutcome(data: PageSyncResponse | undefined, deps: ReportPageSyncDeps): void {
+export function reportPageSyncOutcome(data: PageSyncOutcome | undefined, deps: ReportPageSyncDeps): void {
     if (!data) return;
     const { t, locale, onSwitchWorkspace } = deps;
 
@@ -72,14 +74,10 @@ export function reportPageSyncOutcome(data: PageSyncResponse | undefined, deps: 
             workspaceName: memberHit.workspaceName,
         }), {
             duration: Infinity,
-            ...(onSwitchWorkspace
-                ? {
-                    action: {
-                        label: t('switchWorkspaceCta', { workspaceName: memberHit.workspaceName }),
-                        onClick: () => onSwitchWorkspace(memberHit.workspaceId),
-                    },
-                }
-                : {}),
+            action: {
+                label: t('switchWorkspaceCta', { workspaceName: memberHit.workspaceName }),
+                onClick: () => onSwitchWorkspace(memberHit.workspaceId),
+            },
         });
     } else if (data.takenCount && data.takenCount > 0) {
         // Held by a workspace the user is NOT in. Name the pages so the merchant

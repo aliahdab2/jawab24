@@ -33,7 +33,7 @@ import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import { whatsappConnectErrorKey } from '@/lib/whatsappConnectErrors';
 import type { Page, NoPagesReason } from '@jawab24/shared';
-import { reportPageSyncOutcome, type PageSyncResponse } from '@/features/pageSync';
+import { reportPageSyncOutcome, takePageSyncOutcome, type PageSyncOutcome } from '@/features/pageSync';
 import dynamic from 'next/dynamic';
 
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
@@ -936,6 +936,33 @@ const PagesPage: NextPageWithLayout = () => {
     }
   }, []);
 
+  // One dependency object for the shared reporter, so a manual sync and a
+  // handed-over Facebook reconnect raise IDENTICAL messages with IDENTICAL
+  // actions. Two call sites with two hand-built dep objects is how the switch
+  // action ends up on one path and not the other.
+  const reportDeps = useMemo(() => ({
+    t,
+    locale,
+    onSwitchWorkspace: (workspaceId: string) => {
+      setActiveWorkspace(workspaceId);
+      fetchPages();
+    },
+  }), [t, locale, setActiveWorkspace, fetchPages]);
+  const reportDepsRef = useRef(reportDeps);
+  reportDepsRef.current = reportDeps;
+
+  // A Facebook reconnect syncs inside auth/callback.tsx but reports HERE.
+  // That leg redirects under the ACCOUNT's language (which can differ from the
+  // locale it rendered in) and has no usable workspace store, so rendering the
+  // refusals there gave the wrong locale and no switch action. It hands the
+  // outcome over instead; this drains it on arrival. `takePageSyncOutcome`
+  // clears as it reads, so a re-render or a later visit cannot stack these
+  // duration:Infinity warnings about a sync that already happened.
+  useEffect(() => {
+    const handedOver = takePageSyncOutcome();
+    if (handedOver) reportPageSyncOutcome(handedOver, reportDepsRef.current);
+  }, []);
+
   const handleSync = useCallback(async () => {
     if (!fbToken) {
       return;
@@ -943,24 +970,15 @@ const PagesPage: NextPageWithLayout = () => {
 
     try {
       setSyncing(true);
-      const { data } = await api.post<PageSyncResponse>('/pages/sync', { accessToken: fbToken });
+      const { data } = await api.post<PageSyncOutcome & { pages?: unknown[] }>('/pages/sync', { accessToken: fbToken });
 
       // Zero-page syncs carry the WHY; any other outcome clears it so stale
       // guidance never outlives a successful connect.
       setNoPagesReason(data?.reason ?? null);
 
       // Every "we did not connect that page" outcome is explained by the shared
-      // reporter — see features/pageSync. Do NOT re-inline these toasts here:
-      // the reconnect leg in auth/callback.tsx calls the same function, and a
-      // second private copy is exactly how that path went silent.
-      reportPageSyncOutcome(data, {
-        t,
-        locale,
-        onSwitchWorkspace: (workspaceId) => {
-          setActiveWorkspace(workspaceId);
-          fetchPages();
-        },
-      });
+      // reporter — see features/pageSync. Do NOT re-inline these toasts here.
+      reportPageSyncOutcome(data, reportDepsRef.current);
 
       // Refresh list
       fetchPages();
@@ -970,7 +988,7 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [fbToken, fetchPages, t, setActiveWorkspace, locale]);
+  }, [fbToken, fetchPages]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;

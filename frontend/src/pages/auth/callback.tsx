@@ -9,16 +9,13 @@ import { AppSkeleton } from '@/components/ui';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { getLocalePath } from '@/utils/locale';
 import { resolveLoginLanguage } from '@/lib/dashboardLanguage';
-import { reportPageSyncOutcome } from '@/features/pageSync';
+import { stashPageSyncOutcome } from '@/features/pageSync';
 
 export default function AuthCallback() {
   const router = useRouter();
   const { setAuth, setWorkspaces } = useAuthStore();
   const t = useTranslations('auth');
   const tErrors = useTranslations('errors');
-  // The reconnect leg reports refused pages with the shared reporter, whose
-  // message keys live in the `pages` namespace (loaded in getStaticProps below).
-  const tPages = useTranslations('pages');
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
 
@@ -99,6 +96,15 @@ export default function AuthCallback() {
           const linkData = await linkResponse.json();
           setAuthRef.current(linkData.user, linkData.token, linkData.fbAccessToken);
           if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces, { defaultWorkspaceId: linkData.defaultWorkspaceId ?? null });
+
+          // THIS is the leg a signed-in merchant reconnecting from /pages takes:
+          // `isAuthenticated` is persisted to localStorage on web and rehydrated
+          // from synchronous storage before this effect runs, so the guard above
+          // is always true there. /auth/facebook/link syncs server-side and
+          // returns what it REFUSED (plan page limit, trial already used, page
+          // held by another workspace) as `pageSync`. Hand it to /pages, which
+          // renders it in the destination locale with a usable workspace store.
+          stashPageSyncOutcome(linkData.pageSync);
 
           if (platform === 'mobile') {
             const tokenStr = encodeURIComponent(linkData.token);
@@ -222,17 +228,34 @@ export default function AuthCallback() {
           // A sync can succeed and still REFUSE pages (plan page limit, trial
           // already used, held by another workspace). Those reasons ride in the
           // body, and discarding it left the merchant with fewer pages than they
-          // granted and no explanation — the exact silence this page shipped with
-          // until 2026-09-04. The toasts persist across the client-side redirect
-          // to /pages below, so they are read there.
-          // ⚠️ No workspace-switch action here: the workspace store is not usable
-          // mid-auth, so the reporter degrades that one toast to a plain warning.
+          // granted and no explanation. Hand it to /pages rather than rendering
+          // it here — see features/pageSync/handoff for why the destination page
+          // is the only correct place to report it.
           if (syncResponse.ok) {
             const syncData = await syncResponse.json().catch(() => undefined);
-            reportPageSyncOutcome(syncData, { t: tPages, locale: preferredLocale });
+            stashPageSyncOutcome(syncData);
+          } else {
+            // A sync that outright FAILED is a strictly worse outcome than one
+            // that refused a page, and it is invisible to the merchant (they are
+            // redirected to /pages as if it worked). Non-fatal, but never silent
+            // to us: without this the only trace is the access log.
+            captureError(
+              new Error(`Reconnect page sync failed: ${syncResponse.status}`),
+              'Reconnect page sync failed',
+              { level: 'warning', tags: { page: 'authCallback', action: 'reconnectSync' } },
+            );
           }
-        } catch {
-          // Non-fatal — pages will still show, user can manually sync
+        } catch (syncErr) {
+          // Transport failure — pages still render and the merchant can sync
+          // manually, but we must be able to see that this happened. An abort is
+          // this component unmounting, not a failure (same guard as the outer
+          // catch below); reporting it would bury the real ones.
+          if (!(syncErr instanceof Error && syncErr.name === 'AbortError')) {
+            captureError(syncErr, 'Reconnect page sync request failed', {
+              level: 'warning',
+              tags: { page: 'authCallback', action: 'reconnectSync' },
+            });
+          }
         }
 
         if (platform === 'mobile') {
@@ -333,7 +356,7 @@ export default function AuthCallback() {
       setError(errorMessage);
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
-  }, [t, tErrors, tPages]);
+  }, [t, tErrors]);
 
   useEffect(() => {
     if (router.isReady) {

@@ -58,7 +58,7 @@ vi.mock('../../src/services/facebook', () => ({
 }));
 
 vi.mock('../../src/services/pages', () => ({
-    pagesService: { syncFromFacebook: vi.fn().mockResolvedValue(undefined) },
+    pagesService: { syncFromFacebook: vi.fn() },
 }));
 
 // Login/link paths resolve the caller's partner status for the nav entry.
@@ -83,6 +83,24 @@ import { facebookService } from '../../src/services/facebook';
 import { pagesService } from '../../src/services/pages';
 import { workspaceService } from '../../src/services/workspace';
 import { isPartnerUser } from '../../src/services/partnerAccess';
+
+/**
+ * A `syncFromFacebook` result in PRODUCTION shape — every field the controller
+ * reads, zeroed.
+ *
+ * The fixture used to be `undefined`, which made `syncResult.syncedPages.length`
+ * throw straight into the "non-fatal" catch: the zero-page alert and the
+ * refusal mapping below it never ran, and this suite was green regardless of
+ * what either did. Keep this exhaustive — a missing field re-opens that hole.
+ */
+const syncResult = (overrides: Record<string, unknown> = {}) => ({
+    syncedPages: [{ id: 'page-1' }],
+    skippedCount: 0, skippedPages: [], skipReason: 'page_limit' as const, pageLimit: null,
+    takenCount: 0, takenPages: [],
+    trialBlockedCount: 0, trialBlockedPages: [],
+    revokedCount: 0, alreadyMemberOf: [], noPagesDiagnosis: null,
+    ...overrides,
+}) as any;
 
 describe('AuthController - linkFacebook', () => {
     let authController: AuthController;
@@ -109,7 +127,7 @@ describe('AuthController - linkFacebook', () => {
         vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ token: 'long-lived', expiresAt: new Date('2026-12-31') });
         vi.mocked(facebookService.getUserProfile).mockResolvedValue({ id: 'fb-123', picture: 'https://pic.example.com' });
         vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([{ id: 'ws-1' }] as any);
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(undefined);
+        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(syncResult());
         vi.mocked(authService.linkFacebookToUser).mockResolvedValue(undefined);
         // Default: the Facebook identity is unowned, so the collision guard is a no-op
         // and the happy-path tests proceed. Collision cases override this per test.
@@ -174,6 +192,61 @@ describe('AuthController - linkFacebook', () => {
         expect(mockReply.send).toHaveBeenCalledWith(
             expect.objectContaining({ token: 'new-jwt' })
         );
+    });
+
+    /**
+     * The refusals this route produces are the ONLY thing standing between a
+     * merchant and "I granted two pages and got one, with no explanation".
+     * `auth/callback.tsx` reaches this route whenever the persisted store says
+     * authenticated — which on web is always — so a signed-in reconnect that
+     * hits the plan's page limit is explained here or nowhere.
+     */
+    describe('refused pages are returned to the client', () => {
+        it('returns what the sync refused, so /pages can explain it', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValueOnce(syncResult({
+                skippedCount: 1,
+                skippedPages: [{ pageName: 'Second Page' }],
+                skipReason: 'page_limit',
+                pageLimit: 1,
+            }));
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
+                token: 'new-jwt',
+                pageSync: {
+                    skippedCount: 1,
+                    skippedPages: [{ pageName: 'Second Page' }],
+                    skipReason: 'page_limit',
+                    pageLimit: 1,
+                },
+            }));
+        });
+
+        it('returns pages held by a workspace the user already belongs to', async () => {
+            const alreadyMemberOf = [{ workspaceId: 'ws-2', workspaceName: 'Other Co', role: 'member', pageName: 'P' }];
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValueOnce(syncResult({ alreadyMemberOf }));
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ pageSync: { alreadyMemberOf } }));
+        });
+
+        it('omits pageSync entirely when nothing was refused — silence is correct on the happy path', async () => {
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            const sent = vi.mocked(mockReply.send!).mock.calls[0][0] as Record<string, unknown>;
+            expect(sent).not.toHaveProperty('pageSync');
+        });
+
+        it('omits pageSync when the sync itself failed', async () => {
+            vi.mocked(pagesService.syncFromFacebook).mockRejectedValueOnce(new Error('sync failed'));
+
+            await authController.linkFacebook(makeRequest(), mockReply as FastifyReply);
+
+            const sent = vi.mocked(mockReply.send!).mock.calls[0][0] as Record<string, unknown>;
+            expect(sent).not.toHaveProperty('pageSync');
+        });
     });
 
     it('skips page sync when user has no workspace', async () => {

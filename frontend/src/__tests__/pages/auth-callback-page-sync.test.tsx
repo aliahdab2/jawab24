@@ -1,35 +1,47 @@
 /**
- * The Facebook RECONNECT leg must explain pages the backend refused.
+ * Both Facebook RECONNECT legs must hand the refused pages on to /pages.
  *
  * A sync can succeed (200) and still refuse pages — plan page limit, trial
- * already used, held by another workspace. Those reasons ride in the response
- * body. This page used to `await fetch('/pages/sync')` and throw the body away,
- * so the merchant landed on /pages with fewer pages than they granted and no
- * explanation at all. Observed 2026-09-04 on a Starter workspace at
+ * already used, held by another workspace. `auth/callback.tsx` used to throw
+ * that away, so the merchant landed on /pages with fewer pages than they
+ * granted and no explanation. Observed 2026-09-04 on a Starter workspace at
  * `max_pages = 1`: Facebook returned 2 pages, the backend refused the second
  * with `skipReason: 'page_limit'`, and nothing was ever shown.
  *
- * These tests pin the REPORTING, not the fetch — a sync that happens silently is
- * the defect.
+ * ⚠️ There are TWO legs and they are NOT interchangeable:
+ *
+ *  1. `POST /auth/facebook/link` — taken when the persisted store says
+ *     authenticated. On web that is ALWAYS (`isAuthenticated` is persisted to
+ *     localStorage and rehydrated from synchronous storage before this effect
+ *     runs), so it is the leg a signed-in merchant reconnecting from /pages
+ *     actually takes. It syncs SERVER-side and returns the refusals as
+ *     `pageSync`.
+ *  2. `POST /auth/facebook` then `POST /pages/sync` — taken only when the
+ *     browser holds no session (the mobile Custom Tab jar).
+ *
+ * The first version of this fix covered only leg 2, and this suite only ever
+ * ran with `isAuthenticated = false` — so it was green while the leg a web
+ * merchant takes stayed silent. Every test below states its leg.
+ *
+ * These tests pin the HANDOFF, not the fetch: a sync whose refusals go nowhere
+ * is the defect. The rendering itself is pinned on /pages (pages.test.tsx),
+ * which is where it now happens.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import AuthCallback from '@/pages/auth/callback';
+import { takePageSyncOutcome } from '@/features/pageSync';
 
-const mockToastWarning = vi.hoisted(() => vi.fn());
-vi.mock('sonner', () => ({ toast: { warning: mockToastWarning, error: vi.fn(), success: vi.fn() } }));
+const mockCaptureError = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } }));
 
 vi.mock('@/lib/sentryHelpers', () => ({
-    captureError: vi.fn(),
+    captureError: mockCaptureError,
     getBackendErrorCode: () => undefined,
 }));
 
-// Translations: return the key plus the interpolated values, so an assertion can
-// prove the RIGHT message fired with the RIGHT page names — not merely that some
-// toast appeared.
 vi.mock('next-intl', () => ({
-    useTranslations: (ns: string) => (key: string, values?: Record<string, unknown>) =>
-        `${ns}.${key}${values ? `:${JSON.stringify(values)}` : ''}`,
+    useTranslations: (ns: string) => (key: string) => `${ns}.${key}`,
 }));
 
 const { mockRouterReplace, routerState } = vi.hoisted(() => ({
@@ -57,116 +69,139 @@ vi.mock('@/lib/store', () => ({
 
 vi.mock('@/components/ui', () => ({ AppSkeleton: () => <div data-testid="skeleton" /> }));
 
-/** A successful /auth/facebook exchange, then the /pages/sync answer under test. */
-function mockAuthThenSync(syncBody: unknown, syncOk = true) {
+const AUTH_BODY = {
+    token: 'session-token',
+    fbAccessToken: 'fb-token',
+    user: { id: 'u1', email: 'merchant@example.com' },
+    settings: {},
+};
+
+/** Leg 2: no session in this browser — `/auth/facebook` then `/pages/sync`. */
+function mockUnauthenticatedLeg(syncBody: unknown, syncOk = true) {
+    authState.isAuthenticated = false;
     const fetchMock = vi.fn((url: string) => {
         if (url.includes('/pages/sync')) {
-            return Promise.resolve({
-                ok: syncOk,
-                json: () => Promise.resolve(syncBody),
-            } as Response);
+            return Promise.resolve({ ok: syncOk, status: syncOk ? 200 : 500, json: () => Promise.resolve(syncBody) } as Response);
         }
-        return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({
-                token: 'session-token',
-                fbAccessToken: 'fb-token',
-                user: { id: 'u1', email: 'merchant@example.com' },
-                settings: {},
-            }),
-        } as Response);
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(AUTH_BODY) } as Response);
     });
     vi.stubGlobal('fetch', fetchMock);
     return fetchMock;
 }
 
-describe('AuthCallback — reconnect leg reports refused pages', () => {
+/** Leg 1: the signed-in web reconnect — `/auth/facebook/link`, which syncs server-side. */
+function mockAuthenticatedLeg(linkBody: Record<string, unknown>) {
+    authState.isAuthenticated = true;
+    authState.token = 'existing-token';
+    const fetchMock = vi.fn((url: string) => {
+        if (url.includes('/auth/facebook/link')) {
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ ...AUTH_BODY, ...linkBody }),
+            } as Response);
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+}
+
+const PAGE_LIMIT_OUTCOME = {
+    skippedCount: 1,
+    skippedPages: [{ pageName: 'Jawab24 Test Salla' }],
+    skipReason: 'page_limit' as const,
+    pageLimit: 1,
+};
+
+describe('AuthCallback — reconnect hands refused pages to /pages', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        window.sessionStorage.clear();
         authState.isAuthenticated = false;
+        authState.token = null;
         // "returnUrl|platform|locale|reconnect" — the reconnect shape the Facebook
         // dialog carries (observed live: state=/pages|web|en|reconnect).
         routerState.query = { code: 'oauth-code', state: '/pages|web|en|reconnect' };
     });
 
-    it('names the pages refused by the plan page limit', async () => {
-        mockAuthThenSync({
-            synced: 1,
-            skippedCount: 1,
-            skippedPages: [{ pageName: 'Jawab24 Test Salla' }],
-            skipReason: 'page_limit',
-            pageLimit: 1,
+    describe('signed-in web reconnect (POST /auth/facebook/link)', () => {
+        it('hands over the pages the plan refused', async () => {
+            const fetchMock = mockAuthenticatedLeg({ pageSync: PAGE_LIMIT_OUTCOME });
+
+            render(<AuthCallback />);
+
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            // /pages/sync is NEVER called on this leg — the backend synced already.
+            expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/pages/sync'))).toBe(false);
+            expect(takePageSyncOutcome()).toEqual(PAGE_LIMIT_OUTCOME);
         });
 
-        render(<AuthCallback />);
+        it('hands over pages held by a workspace the user already belongs to', async () => {
+            const alreadyMemberOf = [{ workspaceId: 'w2', workspaceName: 'Other Co', role: 'member', pageName: 'P' }];
+            mockAuthenticatedLeg({ pageSync: { alreadyMemberOf } });
 
-        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
-        const [message, options] = mockToastWarning.mock.calls[0];
-        expect(message).toContain('pages.pageLimitSkippedWarning');
-        expect(message).toContain('Jawab24 Test Salla');
-        expect(message).toContain('"limit":1');
-        // The merchant must act on this (upgrade) — it must not expire unread.
-        expect(options).toMatchObject({ duration: Infinity });
-    });
+            render(<AuthCallback />);
 
-    it('tells a returning identity to subscribe rather than to upgrade', async () => {
-        mockAuthThenSync({
-            synced: 0,
-            skippedCount: 2,
-            skippedPages: [{ pageName: 'Page A' }, { pageName: 'Page B' }],
-            skipReason: 'subscription_inactive',
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            expect(takePageSyncOutcome()).toEqual({ alreadyMemberOf });
         });
 
-        render(<AuthCallback />);
+        it('hands over nothing when every granted page connected', async () => {
+            mockAuthenticatedLeg({});
 
-        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
-        const [message] = mockToastWarning.mock.calls[0];
-        expect(message).toContain('pages.trialUsedSkippedWarning');
-        expect(message).not.toContain('pageLimitSkippedWarning');
+            render(<AuthCallback />);
+
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            expect(takePageSyncOutcome()).toBeUndefined();
+        });
     });
 
-    it('reports pages held by another workspace', async () => {
-        mockAuthThenSync({
-            synced: 0,
-            takenCount: 1,
-            takenPages: [{ pageName: 'Someone Elses Page' }],
+    describe('no session in this browser (POST /auth/facebook + POST /pages/sync)', () => {
+        it('hands over the pages the plan refused', async () => {
+            mockUnauthenticatedLeg({ synced: 1, ...PAGE_LIMIT_OUTCOME });
+
+            render(<AuthCallback />);
+
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            expect(takePageSyncOutcome()).toMatchObject({ skipReason: 'page_limit', pageLimit: 1 });
         });
 
-        render(<AuthCallback />);
+        it('distinguishes a returning identity from a page-count limit', async () => {
+            mockUnauthenticatedLeg({
+                synced: 0,
+                skippedCount: 2,
+                skippedPages: [{ pageName: 'Page A' }, { pageName: 'Page B' }],
+                skipReason: 'subscription_inactive',
+            });
 
-        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
-        expect(mockToastWarning.mock.calls[0][0]).toContain('pages.pageTakenWarning');
-    });
+            render(<AuthCallback />);
 
-    it('offers no workspace-switch action mid-auth — the store is not usable yet', async () => {
-        mockAuthThenSync({
-            synced: 0,
-            alreadyMemberOf: [{ workspaceId: 'w2', workspaceName: 'Other Co', role: 'member', pageName: 'P' }],
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            expect(takePageSyncOutcome()).toMatchObject({ skipReason: 'subscription_inactive', skippedCount: 2 });
         });
 
-        render(<AuthCallback />);
+        it('hands over nothing when every granted page connected', async () => {
+            mockUnauthenticatedLeg({ synced: 2, pages: [{ id: 'a' }, { id: 'b' }] });
 
-        await waitFor(() => expect(mockToastWarning).toHaveBeenCalledTimes(1));
-        const [message, options] = mockToastWarning.mock.calls[0];
-        expect(message).toContain('pages.pageTakenInWorkspace');
-        expect(options).not.toHaveProperty('action');
-    });
+            render(<AuthCallback />);
 
-    it('stays silent when every granted page connected', async () => {
-        mockAuthThenSync({ synced: 2, pages: [{ id: 'a' }, { id: 'b' }] });
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
+            expect(takePageSyncOutcome()).toBeUndefined();
+        });
 
-        render(<AuthCallback />);
+        it('reports a failed sync instead of redirecting in silence', async () => {
+            mockUnauthenticatedLeg({}, false);
 
-        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalled());
-        expect(mockToastWarning).not.toHaveBeenCalled();
-    });
+            render(<AuthCallback />);
 
-    it('does not block the redirect when the sync itself fails', async () => {
-        mockAuthThenSync({}, false);
-
-        render(<AuthCallback />);
-
-        await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/pages', '/pages', { locale: 'en' }));
-        expect(mockToastWarning).not.toHaveBeenCalled();
+            await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/pages', '/pages', { locale: 'en' }));
+            expect(takePageSyncOutcome()).toBeUndefined();
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Reconnect page sync failed',
+                expect.objectContaining({ tags: expect.objectContaining({ action: 'reconnectSync' }) }),
+            );
+        });
     });
 });
