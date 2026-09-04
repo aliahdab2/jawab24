@@ -410,15 +410,44 @@ says explicitly that no button needs pressing. The old step-1/2 pair (walk `/sal
 then "stop and do not press «ربط صفحاتك الاجتماعية»") is deleted: instructing someone *not* to
 press a button on a screen you sent them to is a weaker guarantee than not sending them there.
 
-⏭ **One recommendation for the sitting, owner's call.** Every product name in the demo store is
-duplicated at different prices (5 × «تنورة» at 79/83/94/114/124 SAR, 3 × «بنطلون», 3 × «فستان»),
-so **any** «كم سعر X؟» resolves to a *range*, and D-092's summary truncation makes those ranges
-understate: on 2026-09-04 the app answered «من 83 إلى 114» for skirts whose true span is 79–124
-(`product_summary` is 1460 chars, ends in «...», and carried only 2 of the 5). The prices are real
-and the answer is faithful to its context, but a reviewer who cross-checks the storefront can find
-the mismatch. Cheapest remedy, entirely in our hands: **give a few demo products distinct names**
-in the Salla demo store so a price question has one unambiguous answer. Alternative: leave it and
-accept the risk. ⛔ Not a code change — do not touch D-092 for the listing.
+✅ **The demo catalogue was REBUILT 2026-09-04 (owner ruling) — and it fixed a wrong answer.**
+The Salla demo seed is randomised nonsense: 20 products under only 5 duplicated titles
+(9 × «فستان», 5 × «تنورة»…), categories assigned at random (بنطلون filed under «التنانير», تنورة
+under «الجاكيتات»), unspaced measurement dumps for descriptions, and size/colour option labels
+swapped. A catalogue like that reads as fake to a reviewer regardless of whether anyone
+cross-checks a price.
+
+Now: **20 distinct فصحى names, every product in its right category** — الفساتين 9 · التنانير 5 ·
+البناطيل 3 (a new category; trousers had none) · البلايز 2 · الجاكيتات 1. Prices and stock
+untouched. Verified in `ecommerce_products` after a re-sync.
+
+⭐⭐ **Not cosmetic — it corrected a wrong reply.** Before: «كم سعر التنورة؟» → «من 83 إلى 114» for
+skirts whose true span is 79–124. After: «ما أرخص تنورة عندكم؟» → «التنورة القصيرة السادة وسعرها
+79 ريال» (2670 ms), and «كم سعر التنورة البليسيه؟» → «83 ريال … الكمية قليلة» (3156 ms) — one
+unambiguous price per question.
+
+⛔⭐⭐ **Do NOT record «product_summary truncation» as the cause.** After the rename the summary is
+still 1488 chars, still ends in «...», and still contains neither `79 SAR` nor `124 SAR` — yet the
+reply got 79 right. The ai-worker logs show `pipeline: ecommerce_tools`,
+`tool_path_final {site: tools_direct, via: respond}`, `kb_original_chars: 15052`, i.e. a context an
+order of magnitude larger than the summary. So the original wrong range came from either the
+summary path or duplicate names defeating retrieval, and nothing measured here separates the two.
+⛔ Still not a code change — do not touch D-092 for the listing.
+
+⏭ **Two lower-priority items left on this store** (neither blocks the reviewer's test): the
+descriptions are still unspaced measurement dumps, and the size/colour option labels are still
+swapped — ⭐ that swap is **Salla's own demo data, not our bug**:
+`buildSallaVariantSummary` maps each option's name to its own values and structurally cannot cross
+them.
+
+⛔⭐⭐ **Mechanics, if this is ever redone.** Names: `s.salla.sa/products/editor` (Bulk Product
+Editor) — but its **category column is READ-ONLY**, and its ag-Grid opens a cell editor only on a
+**trusted** double-click (a JS-dispatched `dblclick` does nothing), so it cannot be scripted in one
+pass; scroll the cell into view first or the click lands under the footer. Categories: only per
+category at `.../products/options/categories/<id>` → «Add & arrange products», whose picker is in a
+**shadow DOM** (`querySelectorAll` returns 0; drive it by a11y snapshot uid only). ⛔ Adding a
+product to a category does **not** remove it from the old one — clean every category from both
+sides, and re-read the panel before each Save (a stray reopen-click silently added a dress twice).
 
 ⭐⭐ **RE-WALKED IN PRODUCTION 2026-09-04, as the review account itself** (`isAdmin:false`), which
 is the check the previous pass could not make — it ran against a local worktree build. Every label
