@@ -27,7 +27,16 @@ const webOnlyFiles = [
 
 // HTML pages not needed in mobile (users see native app screens, not these)
 // NOTE: privacy.html and terms.html are kept — login page links to them internally
-const webOnlyHtml = ['blog.html', 'what-is-jawab24.html'];
+//
+// ⛔ Next exports a section's INDEX page as `<dir>.html` NEXT TO `<dir>/`, so
+// removing the directory alone leaves the hub page behind. That asymmetry
+// shipped: `blog.html` was listed by hand but `compare.html` never was, so
+// after `compare/` was stripped the hub survived — and once the SEO work added
+// «ابتداءً من 15$ شهريًا» to it, the iOS bundle carried a visible price again.
+// The payment guard caught it (2026-09-05) before it reached Apple. Derive the
+// index pages from the directory list so a future web-only section cannot
+// reintroduce the same gap by being added in one place and not the other.
+const webOnlyHtml = [...webOnlyDirs.map((dir) => `${dir}.html`), 'what-is-jawab24.html'];
 
 console.log('Stripping web-only assets from mobile build...');
 let saved = 0;
