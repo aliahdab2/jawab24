@@ -63,6 +63,8 @@ export const BRAND_ASSETS = {
     social: {
         facebook: 'https://facebook.com/jawab24app',
         instagram: 'https://instagram.com/jawab24app',
+        /** Company Page created 2026-09-05 (id 144851288); the slug is the public URL. */
+        linkedin: 'https://www.linkedin.com/company/jawab24',
         twitter: '@jawab24',
     },
     stores: {

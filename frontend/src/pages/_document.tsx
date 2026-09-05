@@ -139,6 +139,7 @@ export default function MyDocument({ locale }: DocProps) {
               "sameAs": [
                 "https://www.facebook.com/jawab24app",
                 "https://www.instagram.com/jawab24app",
+                BRAND_ASSETS.social.linkedin,
                 "https://x.com/jawab24",
                 // The Play listing (4.8★) is our strongest external trust asset —
                 // Google already attaches it to blog results in the SERP; claim it.
