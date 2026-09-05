@@ -14,6 +14,9 @@ import { isDemoFacebookId } from '../utils/demo';
 import { resolveMarketplaceBilling } from './marketplaceBilling';
 import { getWhatsAppUnavailableReason } from './whatsappAvailability';
 import type { NotificationType } from './notifications';
+import { emailService, type EmailType } from './email';
+import { getEmailRecipient } from './emailRecipient';
+import { aiUsageEmailTemplate, type AiUsageEmailVariant } from '../utils/emailTemplates';
 import {
     resolveAiQuotaStatus,
     PAST_DUE_GRACE_DAYS,
@@ -82,6 +85,79 @@ export function resolveAiUsageNotificationType(
         return quota.nearWall ? 'ai_usage_topup_low' : 'ai_usage_on_topup';
     }
     return 'ai_usage_limit_reached';
+}
+
+/**
+ * The crossings that also go out by email, and the `email_sends.type` each is
+ * audited under. Keyed by `AiUsageEmailVariant`, so the three notification types
+ * that have an email and the three the template can render are ONE list — adding
+ * a variant to the template without a row here is a compile error.
+ *
+ * `ai_usage_on_topup` is absent on purpose (see the template's docblock): it
+ * reports a non-event.
+ */
+const AI_USAGE_EMAIL_TYPE = {
+    ai_usage_warning_80: 'ai_usage_warning',
+    ai_usage_limit_reached: 'ai_usage_limit',
+    ai_usage_topup_low: 'ai_usage_warning',
+} as const satisfies Record<AiUsageEmailVariant, EmailType>;
+
+/** Does this crossing get an email as well as the in-app card? */
+export function isEmailableAiUsageType(type: NotificationType): type is AiUsageEmailVariant {
+    return Object.prototype.hasOwnProperty.call(AI_USAGE_EMAIL_TYPE, type);
+}
+
+/**
+ * Email the merchant about a newly-crossed AI-usage threshold.
+ *
+ * The in-app card and the push both require the merchant to be looking — the
+ * bell needs the dashboard open, the push needs the app installed. Running out
+ * of replies is silent by construction (customers keep writing; they receive a
+ * generic fallback), so a merchant with neither surface open learned about it
+ * only from the business they lost. Email is the channel that reaches them
+ * where they already are.
+ *
+ * No dedup of its own: the caller has already claimed the once-per-period
+ * threshold key, so this runs at most once per merchant per threshold per
+ * billing period. Exported for tests.
+ */
+export async function sendAiUsageThresholdEmail(
+    userId: string,
+    variant: AiUsageEmailVariant,
+    counts: { used: number; limit: number; balance: number },
+): Promise<void> {
+    const recipient = await getEmailRecipient(userId);
+    // No address on file — nothing was sent, and nothing pretends otherwise.
+    // The in-app card remains the merchant's only channel.
+    if (!recipient) return;
+
+    const { subject, html } = aiUsageEmailTemplate({
+        lang: recipient.lang,
+        name: recipient.name,
+        variant,
+        used: counts.used,
+        limit: counts.limit,
+        balance: counts.balance,
+        pricingUrl: `${config.frontendUrl}/${recipient.lang}/pricing`,
+    });
+
+    // `trySend`, not `send`: `send` fails in two shapes and only one of them
+    // looks like failure (see its docblock).
+    const { delivered, error } = await emailService.trySend({
+        to: recipient.email,
+        subject,
+        html,
+        type: AI_USAGE_EMAIL_TYPE[variant],
+        userId,
+    });
+
+    if (!delivered) {
+        captureError(
+            new Error(`AI usage ${variant} email failed: ${error ?? 'unknown error'}`),
+            'subscriptions.aiUsageEmailFailed',
+            { tags: { service: 'subscriptions' }, level: 'warning', extra: { userId, variant } },
+        );
+    }
 }
 
 /**
@@ -998,7 +1074,35 @@ export const subscriptionsService = {
                 const variables: Record<string, string> = type === 'ai_usage_on_topup' || type === 'ai_usage_topup_low'
                     ? { limit: limit.toLocaleString('en-US'), balance: topupBalance.toLocaleString('en-US') }
                     : { used: String(newUsed), limit: String(limit), percent: String(threshold) };
-                await notificationService.sendTemplateNotification(userId, type, variables);
+
+                // Both channels, in PARALLEL and each with its own failure. Parallel
+                // because this runs on the reply path (Rule 17.3) — sequential would
+                // add the FCM round-trip and the Resend round-trip to the same reply;
+                // independent because sharing one `await` made the least reliable
+                // channel a gate on the other, which is the mistake
+                // `pageAutoPause.notifyMerchantAutoPaused` was corrected for. A
+                // rejection here no longer aborts the loop either: when one increment
+                // crosses 80 and 100 at once, a failed 80% send must not swallow the
+                // "your replies have stopped" notice behind it.
+                const [inApp, email] = await Promise.allSettled([
+                    notificationService.sendTemplateNotification(userId, type, variables),
+                    isEmailableAiUsageType(type)
+                        ? sendAiUsageThresholdEmail(userId, type, { used: newUsed, limit, balance: topupBalance })
+                        : Promise.resolve(),
+                ]);
+
+                if (inApp.status === 'rejected') {
+                    captureError(inApp.reason, 'Failed to send AI usage threshold notification', {
+                        tags: { service: 'subscriptions' },
+                        extra: { userId, type, threshold },
+                    });
+                }
+                if (email.status === 'rejected') {
+                    captureError(email.reason, 'Failed to send AI usage threshold email', {
+                        tags: { service: 'subscriptions' },
+                        extra: { userId, type, threshold },
+                    });
+                }
             }
         } catch (err) {
             captureError(err, 'Failed to dispatch AI usage threshold notification', {

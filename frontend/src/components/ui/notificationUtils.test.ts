@@ -26,6 +26,12 @@ describe('resolveNotificationRoute — types that demand an action must be tappa
         ['kb_gap', '/pages'],
         // Dead Instagram-direct credential — reconnect lives on /pages.
         ['instagram_reconnect_needed', '/pages'],
+        // The AI-usage crossings whose copy — and, since 2026-09-05, whose
+        // EMAIL — tells the merchant to upgrade. They were pinned as account
+        // health but had no route: the card looked and behaved as dead.
+        ['ai_usage_warning_80', '/pricing'],
+        ['ai_usage_limit_reached', '/pricing'],
+        ['ai_usage_topup_low', '/pricing'],
     ];
 
     it.each(ACTION_DEMANDING)('%s routes to %s', (type, route) => {
@@ -84,6 +90,27 @@ describe('auto_reply_paused_billing presentation', () => {
     });
 });
 
+
+describe('AI usage crossings — presentation', () => {
+    it('each has its own style rather than the generic bell fallback', () => {
+        for (const type of ['ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup', 'ai_usage_topup_low']) {
+            expect(getNotificationStyle(type)).not.toBe(DEFAULT_STYLE);
+        }
+    });
+
+    it('is red only when replies have actually stopped', () => {
+        // Orange is the commercial/quota hue; red means stopped. The top-up
+        // notice is emerald — nothing stopped and nothing is asked of anyone.
+        expect(getNotificationStyle('ai_usage_limit_reached').hue).toBe('red');
+        expect(getNotificationStyle('ai_usage_warning_80').hue).toBe('orange');
+        expect(getNotificationStyle('ai_usage_topup_low').hue).toBe('orange');
+        expect(getNotificationStyle('ai_usage_on_topup').hue).toBe('emerald');
+    });
+
+    it('leaves the calm top-up notice unrouted — it asks for nothing', () => {
+        expect(resolveNotificationRoute('ai_usage_on_topup', undefined)).toBeNull();
+    });
+});
 
 describe('instagram_reconnect_needed — the dead Instagram-direct credential notice', () => {
     it('has its own style (not the generic bell) with the dead-channel red severity', () => {

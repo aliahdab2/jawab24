@@ -104,7 +104,9 @@ const pageRow = (over: Record<string, unknown> = {}) => ({
     accessToken: 'enc:stale-page-token', ...over,
 });
 const userRow = (over: Record<string, unknown> = {}) => ({ facebookAccessToken: 'enc:user-token', ...over });
-const ownerRow = { ownerEmail: 'owner@example.com', dashboardLanguage: 'ar' };
+// Shape of the `getEmailRecipient` projection (services/emailRecipient.ts) —
+// this suite mocks `db`, so the row must match what that helper selects.
+const ownerRow = { email: 'owner@example.com', name: null, dashboardLanguage: 'ar' };
 
 beforeEach(() => {
     vi.clearAllMocks();
