@@ -124,7 +124,15 @@ function mobileBuildEnv({ env = process.env, files = ENV_FILES, now = Date.now()
     ...resolved,
     NEXT_PUBLIC_BUILD_TIME: String(now),
     NEXT_PUBLIC_API_URL: 'https://jawab24.com/api',
-    NEXT_PUBLIC_PHONE_AUTH_ENABLED: 'true',
+    // Phone sign-in has no delivery transport: the SMS rail was retired in
+    // D-123 and `otpService.sendOtp` now throws, so `/auth/phone/request`
+    // answers 503. The web already hides the tab (the compose files pass the
+    // var through empty); this line used to force it ON for mobile only, so
+    // every store binary shipped a sign-in tab that always fails. Set
+    // explicitly rather than deleted, so an ambient value in the shell or an
+    // env file cannot leak in through the `...env` spread above.
+    // Flip back to 'true' with the WhatsApp OTP transport, not before.
+    NEXT_PUBLIC_PHONE_AUTH_ENABLED: 'false',
     IS_MOBILE_BUILD: 'true',
   };
 }

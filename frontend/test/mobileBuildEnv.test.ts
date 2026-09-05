@@ -114,8 +114,21 @@ describe('mobile build-time environment', () => {
     expect(env.NEXT_PUBLIC_SENTRY_DSN).toBe(DSN);
     expect(env.IS_MOBILE_BUILD).toBe('true');
     expect(env.NEXT_PUBLIC_API_URL).toBe('https://jawab24.com/api');
-    expect(env.NEXT_PUBLIC_PHONE_AUTH_ENABLED).toBe('true');
+    expect(env.NEXT_PUBLIC_PHONE_AUTH_ENABLED).toBe('false');
     expect(env.NEXT_PUBLIC_BUILD_TIME).toBe('1234');
+  });
+
+  it('never ships the phone sign-in tab, even if the shell exports it', () => {
+    // The tab was forced ON for mobile builds only, so every store binary
+    // carried a sign-in method with no delivery transport (D-123 retired the
+    // SMS rail; `/auth/phone/request` answers 503). An ambient value must not
+    // be able to reinstate it through the `...env` spread.
+    const env = mobileBuildEnv({
+      env: { NEXT_PUBLIC_SENTRY_DSN: DSN, NEXT_PUBLIC_PHONE_AUTH_ENABLED: 'true' },
+      files: envFiles([null, null]),
+      now: 1234,
+    });
+    expect(env.NEXT_PUBLIC_PHONE_AUTH_ENABLED).toBe('false');
   });
 
   it('is the script `build:mobile` actually runs', () => {
