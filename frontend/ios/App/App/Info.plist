@@ -73,6 +73,6 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Jawab24 uses the microphone to record voice notes for your knowledge base and auto-replies.</string>
+	<string>Jawab24 uses the microphone so you can dictate your business information — your products, prices and hours — instead of typing it.</string>
 </dict>
 </plist>
