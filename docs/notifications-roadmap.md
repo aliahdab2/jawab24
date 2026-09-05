@@ -133,6 +133,28 @@ CREATE TABLE notification_preferences (
 | Subscription Expiring | 3 days before expiry (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
 | Trial Ending | 3 days before `trial_ends_at` (daily cron) | Push + In-App + **Email** | ✅ live — `services/trialReminders.ts` |
 | Trial Ended ("last try") | after `trial_ends_at` passes (daily cron, ≤ `ENDED_LOOKBACK_DAYS` back) | Push + In-App + **Email** | ✅ live — `services/trialReminders.ts` (`runTrialEndedNotices`) |
+| AI replies at 80% of the plan cap | the reply that crosses 80% of `plans.max_ai_replies_per_month` | Push + In-App + **Email** | ✅ live — `subscriptionsService.maybeNotifyAiUsageThreshold` |
+| AI replies at the cap — replies stopped | the reply that crosses 100% with no top-up balance behind it | Push + In-App + **Email** | ✅ live — same crossing, `ai_usage_limit_reached` |
+| Top-up balance nearly gone | crossing 100% with a balance already ≥80% consumed (`nearWall`) | Push + In-App + **Email** | ✅ live — `ai_usage_topup_low` |
+| Now running on top-up balance | crossing 100% with a real top-up runway behind the cap | Push + In-App | ✅ live — **no email on purpose**: nothing stopped, and an email for a non-event trains merchants to ignore the ones that matter |
+
+> ✅ **AI-usage emails shipped 2026-09-05.** The thresholds (`AI_USAGE_THRESHOLDS = [80, 100]`)
+> already fired an in-app card and a push; email was added because both of those require the
+> merchant to be looking — the bell needs the dashboard open, the push needs the app installed —
+> and running out of replies is silent by construction: customers keep writing and receive a
+> generic fallback.
+>
+> - **Event-driven, not a cron.** It fires on the increment that crosses the boundary
+>   (`incrementAiReplies`), so a merchant whose traffic stops at 79% is never warned. That is the
+>   known limit of this design; a sweep would be a separate feature.
+> - **Once per threshold per billing period.** The existing Redis `SET NX` claim
+>   (`notif:ai_usage:{userId}:{periodStart}:{threshold}`, 40-day TTL) gates BOTH channels — the
+>   email adds no dedup of its own.
+> - **The two channels run in parallel and fail independently** (Rule 17.3: this is the reply
+>   path). Neither can silence the other, and neither aborts the loop when one increment crosses
+>   80 and 100 at once.
+> - **Detection is measured against the PLAN CAP**, the copy against plan + top-up
+>   (`resolveAiQuotaStatus`). An unlimited plan (`max_ai_replies_per_month = null`) gets nothing.
 
 > ✅ **Trial Ending shipped 2026-07-31.** `runTrialEndingReminders()` runs once a day (registered
 > in `index.ts` beside the lead digest, first run 7 min after boot). It selects `trialing`

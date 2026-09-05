@@ -1,6 +1,6 @@
 import {
     Bell, MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen, Mail, Clock, UserPlus,
-    CalendarClock, Instagram,
+    CalendarClock, Instagram, Gauge,
     type LucideIcon,
 } from 'lucide-react';
 import { isIOSNative } from '@/lib/capacitor';
@@ -147,6 +147,14 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     provider_failover:     hueStyle(AlertTriangle, 'red'),
     new_lead:              hueStyle(UserPlus, 'emerald'),
     post_reply_orphaned:   hueStyle(CalendarClock, 'amber'),
+    // The AI-usage family. Orange is the billing/quota hue (page_trial_used,
+    // subscription_expiring); red is reserved for "replies have actually
+    // stopped". Without these entries all four fell through to DEFAULT_STYLE's
+    // neutral bell — the same silent gap `auto_reply_paused_billing` had.
+    ai_usage_warning_80:   hueStyle(Gauge, 'orange'),
+    ai_usage_limit_reached: hueStyle(Gauge, 'red'),
+    ai_usage_on_topup:     hueStyle(Gauge, 'emerald'),
+    ai_usage_topup_low:    hueStyle(Gauge, 'orange'),
 };
 
 export const DEFAULT_STYLE: NotificationStyle = hueStyle(Bell, 'brand');
@@ -217,6 +225,13 @@ export function resolveNotificationRoute(
         case 'trial_ending':
         case 'trial_ended':
         case 'page_trial_used':
+        // The three usage crossings whose copy says "upgrade your plan" — and,
+        // since 2026-09-05, whose EMAIL says it too. A null route rendered them
+        // unclickable, so the merchant was told to act with no way to act.
+        // `ai_usage_on_topup` is deliberately absent: it asks for nothing.
+        case 'ai_usage_warning_80':
+        case 'ai_usage_limit_reached':
+        case 'ai_usage_topup_low':
             // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
             return isIOSNative() ? '/dashboard' : '/pricing';
         case 'page_disconnected':

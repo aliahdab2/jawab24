@@ -23,9 +23,9 @@
  * fire-and-forget path, and an alerting failure must never look like — or
  * become — a reply failure.
  */
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db';
-import { pages, settings, users } from '../db/schema';
+import { pages, users } from '../db/schema';
 import { redis } from '../lib/redis';
 import { acquireMutex, releaseMutex } from '../lib/redisMutex';
 import { config } from '../config';
@@ -33,6 +33,7 @@ import { facebookService } from './facebook';
 import { maybeDecryptToken, maybeEncryptToken } from './facebookCrypto';
 import { notificationService } from './notifications';
 import { emailService } from './email';
+import { getEmailRecipient } from './emailRecipient';
 import { pageReconnectEmailTemplate } from '../utils/emailTemplates';
 import { FacebookApiError, DmSendError, isTokenRevoked } from '../utils/fbGraphErrors';
 import { captureError } from '../utils/sentryHelpers';
@@ -637,17 +638,12 @@ async function emailPageOwner(page: RecoverablePage, pageName: string, cause: To
     // `pageAutoPause.notifyMerchantAutoPaused` learned this first, and this copy
     // did not inherit the fix — which is why the "did it deliver?" question now
     // lives in one place, `emailService.trySend`.
-    const [info] = await db
-        .select({ ownerEmail: users.email, dashboardLanguage: settings.dashboardLanguage })
-        .from(users)
-        .leftJoin(settings, eq(settings.userId, users.id))
-        .where(and(eq(users.id, userId), isNotNull(users.email)))
-        .limit(1);
+    const info = await getEmailRecipient(userId);
 
     // No address on file: nothing was sent, so nothing is deduped. Releasing lets
     // a sibling page — or the same page once the owner adds an email — try again
     // rather than inheriting a day of silence bought by a send that never happened.
-    if (!info?.ownerEmail) {
+    if (!info) {
         await releaseClaim(dedupKey, claimToken);
         return;
     }
@@ -659,13 +655,13 @@ async function emailPageOwner(page: RecoverablePage, pageName: string, cause: To
     let failureReason: string | undefined;
     try {
         const { subject, html } = pageReconnectEmailTemplate({
-            lang: info.dashboardLanguage === 'en' ? 'en' : 'ar',
+            lang: info.lang,
             pageName,
             cause,
             dashboardUrl: `${config.frontendUrl}/pages`,
         });
         ({ delivered, error: failureReason } = await emailService.trySend({
-            to: info.ownerEmail, subject, html, type: 'page_reconnect', userId,
+            to: info.email, subject, html, type: 'page_reconnect', userId,
         }));
     } catch (err) {
         // Template rendering, not the send — `trySend` never throws.

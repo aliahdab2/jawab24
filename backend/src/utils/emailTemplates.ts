@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { t, tPlural } from './i18n';
+import { t, tPlural, type MessageKey } from './i18n';
 import { escapeHtml } from './htmlUtils';
 import { formatDateTimeShort, formatCount } from './formatDate';
 
@@ -530,6 +530,111 @@ export function trialEndedEmailTemplate(params: {
         bodyHtml: `${pageHeading(heading)}
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${calloutPanel(rtl, whatRemains)}
+              ${ctaButton(pricingUrl, ctaLabel)}
+              ${signoffLine(signoff)}`,
+    });
+
+    return { subject, html };
+}
+
+/**
+ * The three AI-usage crossings that are worth an email. Deliberately NOT the
+ * fourth (`ai_usage_on_topup`): that one exists to say "nothing happened to
+ * you" — the plan cap was crossed but a real top-up runway absorbs it — and an
+ * email demanding attention for a non-event is how merchants learn to ignore
+ * the ones that matter. The in-app card carries it.
+ *
+ * The string values are the `NotificationType` values on purpose, so the
+ * caller's map from notification → email is exhaustive by construction rather
+ * than by a second vocabulary that can drift.
+ */
+export type AiUsageEmailVariant = 'ai_usage_warning_80' | 'ai_usage_limit_reached' | 'ai_usage_topup_low';
+
+/**
+ * AI-usage threshold notice — sent by `subscriptionsService.maybeNotifyAiUsageThreshold`
+ * on the SAME crossing that fires the in-app card, so the merchant hears it once
+ * per period on every channel they have.
+ *
+ * Email exists here because the other two channels both require the merchant to
+ * be looking: the bell needs the dashboard open, the push needs the app
+ * installed. Running out of replies is silent by construction — customers keep
+ * writing and get a generic fallback — so a merchant with neither surface open
+ * discovered it only from the replies that never happened.
+ *
+ * `balance` is only read by the top-up variant; `used` only by the 80% one.
+ */
+export function aiUsageEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    variant: AiUsageEmailVariant;
+    used: number;
+    limit: number;
+    balance: number;
+    pricingUrl: string;
+}): { subject: string; html: string } {
+    const { lang, name, variant, used, limit, balance, pricingUrl } = params;
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
+
+    // Same escaping contract as the trial lifecycle emails: translations are
+    // static, markup-free strings we control; only caller-supplied values are
+    // escaped. The counts are formatted (Arabic-Indic digits in Arabic) before
+    // substitution, exactly as the lead digest does.
+    const escName = escapeHtml(name);
+    // `remaining` is the plan's own headroom, not plan + top-up: the 80% notice
+    // fires for every top-up holder too (see computeCrossedAiThresholds), and the
+    // sentence scopes it to "your monthly plan" so it stays true for them.
+    const counts = {
+        used: formatCount(used, lang),
+        limit: formatCount(limit, lang),
+        remaining: formatCount(Math.max(0, limit - used), lang),
+        balance: formatCount(balance, lang),
+    };
+
+    const keys = {
+        ai_usage_warning_80: {
+            subject: 'aiUsageWarningSubject',
+            heading: 'aiUsageWarningHeading',
+            intro: 'aiUsageWarningIntro',
+            callout: 'aiUsageWarningWhatHappens',
+            cta: 'aiUsageWarningCta',
+            signoff: 'aiUsageWarningSignoff',
+        },
+        ai_usage_limit_reached: {
+            subject: 'aiUsageLimitSubject',
+            heading: 'aiUsageLimitHeading',
+            intro: 'aiUsageLimitIntro',
+            callout: 'aiUsageLimitWhatRemains',
+            cta: 'aiUsageLimitCta',
+            signoff: 'aiUsageLimitSignoff',
+        },
+        ai_usage_topup_low: {
+            subject: 'aiUsageTopupLowSubject',
+            heading: 'aiUsageTopupLowHeading',
+            intro: 'aiUsageTopupLowIntro',
+            callout: 'aiUsageTopupLowWhatHappens',
+            cta: 'aiUsageTopupLowCta',
+            signoff: 'aiUsageTopupLowSignoff',
+        },
+    } as const satisfies Record<AiUsageEmailVariant, Record<string, MessageKey>>;
+
+    const k = keys[variant];
+    const subject = t(k.subject, lang, counts);
+    const heading = t(k.heading, lang);
+    const intro = t(k.intro, lang, { ...counts, name: escName });
+    const callout = t(k.callout, lang, counts);
+    const ctaLabel = t(k.cta, lang);
+    const signoff = t(k.signoff, lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
+        bodyHtml: `${pageHeading(heading)}
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              ${calloutPanel(rtl, callout)}
               ${ctaButton(pricingUrl, ctaLabel)}
               ${signoffLine(signoff)}`,
     });
