@@ -746,7 +746,10 @@ export const subscriptionsService = {
         // refused (owner's own account, 2026-08-14). `reason` is deliberately NOT
         // forwarded: it is an internal English string, and the client renders a
         // translated message keyed off `code`.
-        const entitlement = this.checkSubscriptionStatus(subscription);
+        // Read through resolveEntitlement, not checkSubscriptionStatus: the shared
+        // demo fixture is exempted there exactly as the reply gates exempt it, so
+        // this banner and /limits/ai can never give the same account two answers.
+        const entitlement = await this.resolveEntitlement(subscriptionOwnerId, subscription);
         const entitlementEnd = resolveEntitlementEnd(subscription);
 
         // What the block has cost so far, counted only when there IS a block and
@@ -1144,6 +1147,29 @@ export const subscriptionsService = {
             .where(eq(users.id, userId))
             .limit(1);
         return isDemoFacebookId(row?.facebookId);
+    },
+
+    /**
+     * The entitlement verdict a USER-FACING surface should show for a subscription
+     * owner: `checkSubscriptionStatus`, plus the shared-demo exemption the reply
+     * gates already apply (canUseAiReplies / canAutoReply).
+     *
+     * Exists because that exemption lived only inside those two gates. The usage
+     * summary the dashboard banner reads called `checkSubscriptionStatus` directly,
+     * so from 2026-08-17 the demo workspace answered `allowed: true` on /limits/ai
+     * and `allowed: false, cause: 'trial_expired'` on /usage — one account, two
+     * verdicts, and a red "trial ended, renew on the website" card in front of
+     * every App Store reviewer who tapped Try Demo (seen on a physical iPhone,
+     * 2026-09-05). Any surface that SHOWS the verdict reads it from here so it
+     * cannot disagree with the gate that ENFORCES it.
+     *
+     * Demo is consulted on the deny path only, matching the two existing sites:
+     * a healthy row never pays the extra users read (Rule 17).
+     */
+    async resolveEntitlement(ownerId: string, subscription: SubscriptionStatusInput): Promise<LimitCheckResult> {
+        const verdict = this.checkSubscriptionStatus(subscription);
+        if (verdict.allowed) return verdict;
+        return (await this.isDemoUser(ownerId)) ? { allowed: true } : verdict;
     },
 
     /**

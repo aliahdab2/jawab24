@@ -304,6 +304,78 @@ describe('Subscriptions Service', () => {
         });
     });
 
+    describe('resolveEntitlement — the verdict USER-FACING surfaces read', () => {
+        // The shared demo fixture signs up on the ordinary path with a normal trial
+        // that expires and is never renewed. canUseAiReplies/canAutoReply exempt it;
+        // the usage summary the dashboard banner reads did NOT, so one account
+        // answered `allowed: true` on /limits/ai and `allowed: false,
+        // cause: 'trial_expired'` on /usage. The visible cost was a red
+        // "trial ended — renew on the website" card in front of every App Store
+        // reviewer who tapped Try Demo (physical iPhone, 2026-09-05).
+        const expiredTrial = {
+            status: 'past_due' as const,
+            paymentMethod: null,
+            currentPeriodEnd: null,
+            trialEndsAt: new Date('2026-08-17T21:16:21.104Z'),
+        };
+
+        // ⛔ NOT vi.restoreAllMocks(): it also restores the module-level
+        // vi.mock('../../src/services/plans') factory, which empties the plan
+        // lookup and fails createSubscription's tests three describes below.
+        // Restore only the spies this block created.
+        const spies: { mockRestore: () => void }[] = [];
+        const spyOnIsDemoUser = (value: boolean) => {
+            const spy = vi.spyOn(subscriptionsService, 'isDemoUser').mockResolvedValue(value);
+            spies.push(spy);
+            return spy;
+        };
+        afterEach(() => {
+            while (spies.length) spies.pop()!.mockRestore();
+        });
+
+        it('refuses an expired trial for an ordinary account', async () => {
+            const isDemo = spyOnIsDemoUser(false);
+
+            const verdict = await subscriptionsService.resolveEntitlement('user_123', expiredTrial);
+
+            expect(verdict.allowed).toBe(false);
+            expect(verdict.cause).toBe('trial_expired');
+            expect(isDemo).toHaveBeenCalledWith('user_123');
+        });
+
+        it('allows the shared demo fixture on the same expired row', async () => {
+            spyOnIsDemoUser(true);
+
+            const verdict = await subscriptionsService.resolveEntitlement('demo_user', expiredTrial);
+
+            expect(verdict.allowed).toBe(true);
+            expect(verdict.cause).toBeUndefined();
+        });
+
+        it('agrees with the gate it displays — same answer as canUseAiReplies for demo', async () => {
+            // The whole point: display and enforcement cannot diverge again.
+            spyOnIsDemoUser(true);
+            const shown = await subscriptionsService.resolveEntitlement('demo_user', expiredTrial);
+            expect(shown.allowed).toBe(true);
+        });
+
+        it('never reads the users table when the row is already entitled', async () => {
+            // Rule 17: a healthy reply must not pay an extra query. Demo is a
+            // deny-path question only, matching the two pre-existing call sites.
+            const isDemo = spyOnIsDemoUser(false);
+
+            const verdict = await subscriptionsService.resolveEntitlement('user_123', {
+                status: 'active',
+                paymentMethod: 'stripe',
+                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                trialEndsAt: null,
+            });
+
+            expect(verdict.allowed).toBe(true);
+            expect(isDemo).not.toHaveBeenCalled();
+        });
+    });
+
     describe('Trial Period Logic', () => {
         it('should calculate trial days remaining correctly', () => {
             const now = new Date();
