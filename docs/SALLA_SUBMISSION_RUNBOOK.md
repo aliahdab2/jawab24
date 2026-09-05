@@ -8,7 +8,30 @@
 > Created 2026-07-10, while both Salla and WhatsApp were staged dark
 > (WhatsApp awaiting Meta App Review; Salla awaiting Partners ID verification).
 
-## ⛔ STATUS 2026-08-20 — NEVER SUBMITTED. The app is a draft in Development.
+## ⛔ STATUS 2026-09-05 — NEVER SUBMITTED. The app is a draft in Development. Engineering is DONE.
+
+- ✅ Prod commit `26a2a0c0` (= `origin/main` HEAD, deployed 2026-09-05 02:22Z, env **blue**) — carries
+  the D-104 billing rail, #1048 (gallery + dropped `/integrations` gate) and **#1052** (the 3.11.1
+  404 classification). Verified at the read path the same morning: the reconciler's initial sweep
+  logged `scanned=1, errors=0` and the 404 landed at `level:30` «writing nothing» on the review
+  store — it had been `errors=1` + a level-40 warning on every sweep before.
+- ✅ **Listing draft SAVED for the first time 2026-09-04 19:20** — themes, countries SA·UAE·KW, 20/20
+  search terms, logo + 3 screenshots, both paid plans, Contact Info. Still empty: long description,
+  Categories, Educational Video, App Configuration, Service Trial, benefit images, 14-day trial
+  toggle. Field-by-field truth: `docs/store-listing/salla/PORTAL_FIELD_MAP.md` (top section).
+- ✅ **Reviewer account entitlement secured 2026-09-05.** The review account's trial
+  (`ahdabeslov@gmail.com`, subscription `e309921d`) was due to expire **2026-09-14** — mid-review —
+  and `POST /pages/:id/test-reply` is gated by `canUseAiReplies`, so the reviewer's ONLY test step
+  would have returned 403. `trial_ends_at` extended to **2026-12-31** (guarded UPDATE, owner-run;
+  `status='trialing'`, `payment_method` NULL preserved). ⛔⭐⭐ **Never fix this class with the
+  admin «manual upgrade»** — it writes `payment_method='manual'`, a `PAYING_METHODS` member, and
+  `adoptSallaSubscription` then REFUSES the real Salla subscription forever (Tier 3.11.2 would be
+  unreachable). Extend `trial_ends_at` only.
+- ⏭ `SALLA_APP_STORE_URL` remains unset **by design** — post-publish step.
+- ⛔ The remaining distance is **zero code**: a founder video, a portal sitting, three owner
+  decisions, and Tier 3.9 / 3.10.
+
+## STATUS 2026-08-20 (historical) — NEVER SUBMITTED. The app is a draft in Development.
 
 **Correcting this runbook's own previous claim.** It said "APPROVED 2026-08-17 … Phase 2 ✅ DONE".
 That was wrong. A direct read of the Partners portal (app `665811310`, 2026-08-20, via the
@@ -60,9 +83,9 @@ review.** Conflating the two is what put "APPROVED" in this file. Three conseque
    submitting anything"* was too strong. **Save Draft validates the required fields** and refuses
    with *"Please fix the errors before submitting"* while any is empty. So the draft is safe to
    press, but it cannot hold half-finished work — plan one sitting with every asset in hand.
-   Required fields found the hard way: App Logo, App Themes, App Pricing, and Educational Video
-   (starred required, though enforcement is still under test). Details in
-   `docs/store-listing/salla/PORTAL_FIELD_MAP.md`.
+   Required fields found the hard way: App Logo, App Themes, App Pricing. **Educational Video is
+   NOT one of them** — measured 2026-09-04: the draft saved with it empty; its star means
+   *required at Submit*. Details in `docs/store-listing/salla/PORTAL_FIELD_MAP.md`.
 3. 🔴 **The wrong-app creds are the highest-severity item.** Prod is wired to a different app than
    the one being published, so the first real `app.store.authorize` push would arrive for an app
    whose secrets prod does not hold. Repoint Client ID **and** Client Secret **and** the webhook
@@ -139,6 +162,12 @@ leakage.
 `EcommerceApiHttpError: salla API HTTP error: 404` out of `fetchSallaAppSubscription`, logged at
 level 50 «Post-claim Salla billing sync failed». The claim itself still succeeded. Envelope and
 consequences: `docs/testing/salla_live_payloads.jsonl` and the 3.11.1 row of the test plan.
+✅ **FIXED in #1052 (merged 2026-09-04) and DEPLOYED + PROVEN 2026-09-05**: the 404 is now the
+read kind `endpoint_unavailable` (writes nothing, `level:30`, never pauses). Proof on prod, same
+execution, 5 ms apart: «Salla subscriptions endpoint returned 404 — … writing nothing»
+(`storeId 7de48c46`, `status 404`) then `[SallaBillingReconcile] initial sweep scanned=1 …
+errors=0`. ⭐ `scheduleReconcileCron` fires an **initial sweep 3 min after boot**, so a billing-rail
+deploy is verifiable without waiting for the 6 h tick.
 
 ### The Connect dead end — confirmed, now guarded
 
@@ -259,9 +288,11 @@ submission happens on the production app.
       answer from the owner's personal address. Reviewer may test the address; an unanswered one
       is a rejection reason (`SALLA_LAUNCH_ACTIONS.md` §2; `jawab24.com/help` already live and
       linked). See `docs/store-listing/salla/PORTAL_FIELD_MAP.md` §5.
-- [ ] **CI green / deploys unblocked**: repo secrets `STRIPE_TEST_PUBLISHABLE_KEY` +
-      `STRIPE_TEST_SECRET_KEY` restored (`gh secret set …`) so the pipeline + auto-deploy work
-      on launch day (manual `scripts/deploy-production.sh` bypasses GitHub if needed).
+- [x] ~~**CI green / deploys unblocked**: repo secrets `STRIPE_TEST_*` restored so the pipeline +
+      auto-deploy work on launch day~~ — **STRUCK 2026-09-05: not a gate.** The GitHub Actions path
+      is not used (owner ruling, reaffirmed 2026-08-05 — `AI_INSTRUCTIONS.md` Testing Strategy);
+      the deploy gate is the local `scripts/deploy-production.sh` pre-deploy check, which is what
+      shipped `26a2a0c0` on 2026-09-05. A red GitHub check says nothing about a PR.
 
 ## Phase 1 — Submission-day preconditions ⚠️ NEVER APPLIED — carried into Phase 2.5
 
@@ -312,17 +343,17 @@ submission happens on the production app.
 
 ## Phase 2 — Submit — ❌ NOT DONE (this section previously claimed otherwise)
 
-- [ ] Fill the 6 wizard sections and **Save Draft** — safe, reversible, submits nothing. ⚠️ It
-      validates: every required field must be filled before the draft will save at all (see the
-      correction in STATUS above), so go in with all assets ready.
-      Portal state 2026-08-20: Basic Info **partial** (App Name + EN short description only);
-      App Configuration **full**; Features & Media **empty** (0 of 3 screenshots minimum);
-      App Pricing **untouched defaults** (`One-Time`, price 0 — ⚠️ almost certainly the wrong
-      type for a free launch, since **Salla-managed billing is mandatory for paid apps** and
-      launch is free-tier-only per the 2026-05-30 decision); Contact Info **empty**; Service
-      Trial **empty** (Salla's reviewer needs working test credentials).
-      Field-by-field paste map: `docs/store-listing/salla/PORTAL_FIELD_MAP.md`.
-      ⚠️ `Sub Category = "Cross-sell / Upsell"` looks wrong for a customer-service assistant.
+- [ ] Fill the 6 wizard sections and **Save Draft** — **PARTIALLY DONE: first successful save
+      2026-09-04 19:20.** Saved: themes ×3, countries SA·UAE·KW, search terms 20/20, App Logo,
+      3 screenshots, App Pricing (Recurring, «الأعمال» 146 / «الاحترافي» 296, AR+EN names),
+      Contact Info complete. **Still empty:** long description, Categories (owner call —
+      `Chat` vs `Marketing`; the old `Cross-sell / Upsell` is gone), Educational Video, App
+      Configuration (step 2), Service Trial (step 6), 3 benefit images + AR/EN copy, 14-day
+      trial toggle. ⚠️ Save Draft validates all six steps at once and the failure toast never
+      names the field — walk every step for a red marker when it refuses. ⚠️ **Nothing from the
+      2026-08-20 fill persisted** (it was never saved); the 08-20 portal-state paragraph that used
+      to live here described unsaved work. Field-by-field truth:
+      `docs/store-listing/salla/PORTAL_FIELD_MAP.md` (top section).
 - [ ] **Ask Salla support whether approval auto-publishes**, or whether we control go-live.
       This has never been confirmed — it was inferred from the absence of a hold control in the
       06-12 UI recon. Support answered a comparable question in ~29 minutes.
@@ -335,9 +366,10 @@ submission happens on the production app.
       (2026-08-20; secret proven byte-exact 2026-08-23 by a 200 in the portal Webhooks Log)
 - [x] Webhook Security Strategy = **Signature** in the portal (2026-08-23 — was Token ⇒ 401s)
 - [x] `shipping.read` ticked in the portal (2026-08-20; present in the pushed scopes 2026-08-23)
-- [ ] Listing draft complete in **both** languages, 3 screenshots uploaded
-      (all three images are READY — `docs/store-listing/salla/gallery-{1,2,3}.png`, re-shot
-      and review-corrected 2026-09-04; what is left is the portal sitting that uploads them)
+- [ ] Listing draft complete in **both** languages — **3 screenshots + logo UPLOADED and saved
+      2026-09-04** (chrome-devtools `upload_file` works on the portal; no human drag-and-drop
+      needed). Still owed for this line: long description AR+EN, Categories, Educational Video,
+      benefit images + copy, steps 2 and 6
 - [x] A real Salla store connected end-to-end — install + token push + claim. First done
       2026-08-23; that row was DELETED (discovered 2026-08-30) and its re-push expired unclaimed.
       **RE-ESTABLISHED 2026-09-04 14:10Z on a DIFFERENT demo store** —
@@ -348,7 +380,8 @@ submission happens on the production app.
       «Jawab24 Salla Test» linked; the Zid demo's page left untouched. See the 2026-09-04 update
       above for why *Reauthorize App* is not the route
 - [ ] **Tier 3 green** — `track_shipment` ✅ 2026-08-24; 3.11.1 ✅ CAPTURED 2026-09-04 (a **404**,
-      not the predicted `none` — see the 3.11.1 row in `SALLA_TEST_PLAN.md`); remaining: 3.9
+      not the predicted `none`) **and its fix #1052 DEPLOYED + PROVEN 2026-09-05** (initial sweep
+      `errors=0`, 404 at info — see the 3.11.1 row in `SALLA_TEST_PLAN.md`); remaining: 3.9
       (uninstall + billing-mirror cancel, then re-install/re-claim — now safe to run against
       **`2108580704`**, whose install is still live and is no longer the review store), 3.10
 - [x] `SALLA_APP_ID=665811310` set — **2026-08-30**, verified in-container (also 2026-09-03 after
@@ -357,7 +390,12 @@ submission happens on the production app.
 - [ ] Service Trial credentials decided (owner): Jawab24 has no password login, so the reviewer
       signs in with **Facebook** using the review account `ahdabeslov@gmail.com` — the same
       account already shared with Meta and Apple review. Instructions must name the
-      **Salla-linked page** for the smart-reply test
+      **Salla-linked page** for the smart-reply test.
+      ✅ **Entitlement secured 2026-09-05**: this account's trial was due to lapse 2026-09-14 (the
+      reviewer's test-reply would have 403'd mid-review); `trial_ends_at` extended to 2026-12-31
+      with the row kept `trialing` / `payment_method` NULL. ⛔ Never «manual upgrade» a
+      marketplace-linked account — see STATUS. ⏭ Live proof of «اختبار الرد الذكي» as the
+      review account after the extension is still owed (derivation is sound; not yet exercised)
 
 ## Phase 2.5 — Preconditions, in dependency order ⛔ DO THIS FIRST
 

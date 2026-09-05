@@ -192,6 +192,23 @@ has cost production defects before. Run in order — later rows depend on earlie
 > this is not a blocker, but the reviewer sees an "incomplete" nudge. Same for the store card's
 > «سياسات المتجر غير مكتملة» (delivery/payment policies are not API-syncable — D-102).
 >
+> ⛔⭐⭐ **The reviewer's test is ENTITLEMENT-GATED, and the review account is a plain trial.**
+> `POST /pages/:id/test-reply` calls `canUseAiReplies` first (`controllers/pages.ts`); the
+> account's subscription (`e309921d`) is `status='trialing'`, `payment_method` NULL, so its
+> entitlement ends at **`trial_ends_at`** — NOT `current_period_end`
+> (`resolveEntitlementEnd`, `services/subscriptions.ts`). On 2026-09-05 that date was
+> **2026-09-14**, nine days out — the reviewer's only test step would have returned
+> `403 AI_QUOTA_EXCEEDED` mid-review while usage sat at 8/1500. **Extended to 2026-12-31**
+> (guarded UPDATE run by the owner; verified: row still `trialing`, `payment_method` NULL, one
+> subscription row for the user). Both pages of this account also carry
+> `auto_reply_disabled_reason='trial_block'`; that is consistent with the instructions
+> («الردود التلقائية مُعطَّلة») and does not affect the tester.
+> ⛔ **Do NOT secure this with the admin «manual upgrade».** It writes `payment_method='manual'`
+> — a `PAYING_METHODS` member (`config/billingRails.ts`) — so `adoptSallaSubscription` would
+> REFUSE the real Salla subscription on every later sync and **3.11.2 could never be captured.**
+> Only `trial_ends_at` may move. ⏭ Live proof of the tester as the review account after the
+> extension is still owed (the gate is a pure function of four fields, all read; not yet exercised).
+>
 > ⚠️ **Reconcile silence is NOT evidence the billing gate is off.** `SallaBillingReconcile`
 > logs only when `scanned > 0`; with no active non-demo Salla store it runs silently every
 > 6 h and looks identical to "not scheduled". Check `ecommerce_stores` before reading the
@@ -313,8 +330,15 @@ design does not name.** Two real consequences:
 
 ✅ It never wrongly revokes — the throw writes nothing — so this did **not** block Submit.
 
-✅ **FIXED — the 404 is now CLASSIFIED, not thrown (`sallaBilling.ts`, this same worktree's follow-up
-PR).** `fetchSallaAppSubscription` catches an `EcommerceApiHttpError` with `status === 404` and
+✅ **FIXED — the 404 is now CLASSIFIED, not thrown (#1052, merged 2026-09-04 `25834f2b`).
+DEPLOYED 2026-09-05 02:22Z (prod `26a2a0c0`, env blue) and PROVEN at the read path** — the
+reconciler's initial sweep (fires 3 min after boot, `index.ts` `scheduleReconcileCron`) logged on the
+review store `7de48c46`, 5 ms apart: `level:30` «Salla subscriptions endpoint returned 404 — no
+subscription readable; writing nothing» (`status 404`) then `[SallaBillingReconcile] initial sweep
+scanned=1, healed=0, flagged=0, orphaned=0, errors=0`. Before the deploy every sweep had logged
+`errors=1` with a level-40 «reconciliation failed for one store». Not vacuous: the new branch's
+own log line appeared, on the real store, in the same execution as the clean summary.
+`fetchSallaAppSubscription` catches an `EcommerceApiHttpError` with `status === 404` and
 returns a new read kind `endpoint_unavailable`; `syncSallaBilling` handles it beside the
 `unreadable` guard (before the pause path), logs at **info**, and returns outcome
 `endpoint_unavailable` with `changed:false`. So: no more level-50 Sentry error on every unsubscribed
