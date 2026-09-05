@@ -18,8 +18,15 @@ export class MediaDownloadError extends Error {
         readonly reason: MediaDownloadReason,
         message: string,
         readonly status?: number,
+        /**
+         * Standard ES2022 `Error.cause`, set whenever this error WRAPS a lower-level
+         * throw. Sentry's `linkedErrors` integration is on by default and keyed on
+         * `cause`, so anything passed here is rendered as a chained exception on the
+         * event; anything dropped here is unrecoverable at triage time.
+         */
+        options?: ErrorOptions,
     ) {
-        super(message);
+        super(message, options);
         this.name = 'MediaDownloadError';
     }
 }
@@ -66,9 +73,16 @@ export async function fetchMediaBuffer(
     } catch (err) {
         if (err instanceof MediaDownloadError) throw err; // pass our own reasons through unchanged
         if (err instanceof Error && err.name === 'AbortError') {
-            throw new MediaDownloadError('timeout', `download timed out after ${opts.timeoutMs}ms`);
+            throw new MediaDownloadError('timeout', `download timed out after ${opts.timeoutMs}ms`, undefined, { cause: err });
         }
-        throw new MediaDownloadError('network', err instanceof Error ? err.message : String(err));
+        // The message alone is NOT diagnosable here: undici collapses every DNS / TCP /
+        // TLS failure into the literal string "fetch failed" and carries the real code
+        // (ECONNRESET, ENOTFOUND, UND_ERR_CONNECT_TIMEOUT) on `err.cause`. Passing the
+        // original through as our own `cause` is the only thing that puts it on the
+        // Sentry event. Prod 2026-09-04 (JAWAB24-BACKEND-2R) arrived as a bare
+        // "fetch failed" with no underlying error precisely because this line
+        // discarded it, leaving the failure mode unknowable after the fact.
+        throw new MediaDownloadError('network', err instanceof Error ? err.message : String(err), undefined, { cause: err });
     } finally {
         clearTimeout(timer);
     }
