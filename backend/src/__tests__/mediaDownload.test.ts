@@ -15,6 +15,17 @@ function mockResponse(opts: { ok?: boolean; status?: number; contentLength?: num
     };
 }
 
+/** Await a rejection and return it typed, failing loudly if the call unexpectedly resolves. */
+async function rejectionOf(promise: Promise<unknown>): Promise<MediaDownloadError> {
+    try {
+        await promise;
+    } catch (err) {
+        if (err instanceof MediaDownloadError) return err;
+        throw err;
+    }
+    throw new Error('expected fetchMediaBuffer to reject, but it resolved');
+}
+
 beforeEach(() => {
     (globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi.fn();
 });
@@ -70,5 +81,47 @@ describe('fetchMediaBuffer', () => {
     it('throws network on any other fetch error', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ECONNRESET'));
         await expect(fetchMediaBuffer('https://cdn/x', { maxBytes: 1000, timeoutMs: 1000 })).rejects.toMatchObject({ reason: 'network' });
+    });
+
+    // Regression: JAWAB24-BACKEND-2R (prod, 2026-09-04). A `network` failure reached
+    // Sentry as a bare "fetch failed" with nothing underneath it, because the wrapper
+    // dropped the original error. undici collapses every DNS / TCP / TLS failure into
+    // that one string and carries the only useful signal (ECONNRESET, ENOTFOUND,
+    // UND_ERR_CONNECT_TIMEOUT) on the cause, so discarding it makes a recurrence
+    // undiagnosable. Sentry's linkedErrors integration reads `cause`, so pinning the
+    // identity of the wrapped error here is what keeps the chain intact.
+    it('preserves the underlying error as `cause` on a network failure', async () => {
+        const underlying = new Error('fetch failed', {
+            cause: Object.assign(new Error('getaddrinfo ENOTFOUND scontent.cdn'), { code: 'ENOTFOUND' }),
+        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(underlying);
+
+        const err = await rejectionOf(fetchMediaBuffer('https://cdn/x', { maxBytes: 1000, timeoutMs: 1000 }));
+
+        expect(err.reason).toBe('network');
+        expect(err.cause).toBe(underlying);
+    });
+
+    it('preserves the aborting error as `cause` on a timeout', async () => {
+        const abortErr = new Error('aborted');
+        abortErr.name = 'AbortError';
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(abortErr);
+
+        const err = await rejectionOf(fetchMediaBuffer('https://cdn/x', { maxBytes: 1000, timeoutMs: 1000 }));
+
+        expect(err.reason).toBe('timeout');
+        expect(err.cause).toBe(abortErr);
+    });
+
+    // The size/status guards throw our OWN error from inside the try, so they exit via
+    // the instanceof pass-through and wrap nothing. Pinned so the cause plumbing above
+    // is never widened into inventing a cause that does not exist.
+    it('leaves `cause` unset when the failure is our own guard, not a wrapped throw', async () => {
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ ok: false, status: 403 }));
+
+        const err = await rejectionOf(fetchMediaBuffer('https://cdn/x', { maxBytes: 1000, timeoutMs: 1000 }));
+
+        expect(err.reason).toBe('not_ok');
+        expect(err.cause).toBeUndefined();
     });
 });
