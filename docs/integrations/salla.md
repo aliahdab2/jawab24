@@ -323,6 +323,20 @@ unique index over live rows + CHECK), and the Stripe suppression now fires on th
 itself (`isSallaBilled`, exactly like Shopify's) with the store-presence heuristic kept as the
 pre-subscription fallback.
 
+**Four read kinds, not three (since #1052, 2026-09-04; deployed 2026-09-05):**
+`subscription` · `none` · `unreadable` · **`endpoint_unavailable`**. The fourth is a **404** from
+`GET /admin/v2/apps/{app_id}/subscriptions`, which `sallaApiGet` used to throw straight past the
+classification — so every install of a store with no paid subscription raised a level-50 Sentry
+error and counted as a reconciler `errors++`. It is now caught in `fetchSallaAppSubscription`
+(`status === 404` only; every other non-2xx still rethrows), handled in `syncSallaBilling` beside
+the `unreadable` guard and **before** the pause path, logged at info, and returns outcome
+`endpoint_unavailable` with `changed:false`. Entitlement behaviour is byte-identical to the old
+throw — both write nothing. ⛔ **It is deliberately NOT collapsed into `none`**: pre-publish a 404
+cannot be distinguished between "no subscription resource" and "endpoint unavailable while the app
+is in Development", and reading it as `none` would pause paying merchants the day after publish if
+the second is the truth. Revisit once a paid subscription is observable (`SALLA_TEST_PLAN.md`
+3.11.1). Proven on prod 2026-09-05: initial sweep `scanned=1, errors=0`, 404 line at `level:30`.
+
 ⚠️ **Two Salla-specific derivations, both [provisional] until the first live paid envelope:**
 (1) the read carries **no `status` field** — entitlement is DERIVED from `end_date` (future =
 entitled, past = inactive, missing/unparseable = `unknown_state`, which fails loud and writes

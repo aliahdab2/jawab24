@@ -9,23 +9,63 @@
 > publish wizard an unsubmitted draft. Fill and **Save Draft** — see the runbook's readiness gate
 > before anyone presses *Submit for Review*.
 
-## Where the fill session stopped — 2026-08-20
+## Where the portal ACTUALLY stands — 2026-09-05 (live read + first successful save, 2026-09-04)
 
-**Filled and verified:** short description AR (v2), long description AR + EN, Categories = `Marketing`,
-App Themes ×3, Supported Countries = Saudi Arabia only (⚠️ to be widened to SA · UAE · KW per D-094),
-Search Terms 20/20, all three contact emails,
-Privacy Policy URL. Nothing was submitted; `Save Draft` has **not** succeeded yet.
+✅ **The draft has been SAVED** — first time ever, 2026-09-04 19:20 («Last saved: Sep 4, 2026,
+7:20 PM», verified by hard reload). What the save carried:
 
-**Three things stand between here and a saved draft**, in the order they should be cleared:
+| Step | State after the 2026-09-04 save |
+|---|---|
+| 1 Basic Info | App Name ✅ · Short description (EN) ✅ · **App Themes ×3 ✅** · **Supported Countries SA · UAE · KW ✅** (D-094) · **Search Terms 20/20 ✅** · **App Logo ✅ uploaded** · ❌ **Long description EMPTY** · ❌ **Categories EMPTY** (owner call) · ❌ Educational Video EMPTY |
+| 2 App Configuration | not touched |
+| 3 Features & Media | **Screenshots 3/3 ✅ uploaded** (`gallery-{1,2,3}.png`) · Benefit images ×3 + AR/EN titles/descriptions ❌ not entered (⚠️ no Benefits slot was found on step 3 — locate it before assuming it fits) |
+| 4 App Pricing | ✅ **Recurring · 2 monthly plans** — «الأعمال»/Business 146 · «الاحترافي»/Pro 296, AR *and* EN names · ⏭ 14-day trial toggle not yet set (Optional — did not block the save) |
+| 5 Contact Info | ✅ **DONE** — Preferred Contact Method Email · Notification/Submission/Support all `support@jawab24.com` · Privacy `https://jawab24.com/privacy` · FAQ `https://jawab24.com/ar/help` · Support Phone left EMPTY |
+| 6 Service Trial | not touched (required at Submit only — §6) |
 
-| # | Blocker | Owner | Note |
-|---|---|---|---|
-| 1 | 🔴 **App Pricing has no "Free" option** and demands a charge ≥ 1 | needs a **Salla support answer** | ⛔ never enter a price — see §4 for why it would charge merchants for nothing |
-| 2 | 🔴 **Educational Video is required** and blocks the save | needs a 60–90s screencast (script exists, §5 of the brief) | ⛔ never paste a placeholder URL |
-| 3 | ⏳ **Image uploads** — logo, 3 screenshots, 3 benefit images | human drag-and-drop | files staged at `~/Downloads/salla-listing/`; an automation extension cannot open a file picker |
+⭐⭐ **Three "blockers" this map used to carry are DEAD — do not plan around them:**
+
+1. ~~App Pricing has no Free option~~ → **resolved** by D-103/D-104 (§4): two paid plans are entered.
+2. ~~Educational Video blocks Save Draft~~ → **FALSE.** The draft saved with the video field EMPTY.
+   The `*` means *required at Submit*, exactly like the Service Trial fields. It is a
+   pre-**submit** dependency — build the rest of the listing around it. (The 08-20
+   `Educational Video URL: Invalid url` error is not reproduced by an empty field; its trigger is
+   unknown — treat it as history, not as a rule.) ⛔ Still never paste a placeholder URL.
+3. ~~Image uploads are human drag-and-drop only~~ → **FALSE.** The chrome-devtools `upload_file`
+   action drives the portal's file inputs with a local path directly; the logo and all three
+   screenshots were uploaded that way. The "human-only" rule was true of the old Chrome-extension
+   approach, not of the portal.
+
+⛔⭐⭐ **Save Draft validates ALL SIX steps at once.** The first 09-04 save failed with one toast —
+«Please fix the errors before submitting» — whose only cause was `Price: Charge must be at least 1`
+on step 4, a step not being edited. The toast never names the field; the inline error sits on the
+offending step. When Save refuses, walk every step for a red field.
+
+**What still stands between here and Submit** (no engineering owed — every item is a portal
+sitting or an owner decision):
+
+| # | Item | Owner |
+|---|---|---|
+| 1 | 🎬 **Educational Video** (60–90 s, script in `SALLA_LISTING_BRIEF.md` §5) — the long pole | founder |
+| 2 | Long description (AR + EN) — see §3 for the three lines that must NOT be pasted | founder + marketing sign-off |
+| 3 | Categories — owner call between `Chat` and `Marketing` (live taxonomy in the Sub-category section) | owner |
+| 4 | Step 2 App Configuration · step 6 Service Trial (content ready in §6) · 14-day trial toggle | sitting |
+| 5 | 3 benefit images + AR/EN titles/descriptions (`benefits.md`) — find their slot first | sitting |
+| 6 | `support@jawab24.com` auto-responder (§5) | owner |
 
 **Not a blocker, contrary to an earlier prediction:** the Service Trial fields (and therefore the
 reviewer account and demo store) are required only at *Submit*, not to save a draft — see §6.
+
+## Where the fill session stopped — 2026-08-20 (HISTORICAL — nothing from it persisted)
+
+⚠️ **Read this block as history.** The 08-20 session filled the fields below but `Save Draft`
+never succeeded, and a live read on 2026-09-04 found the long description at 0 chars, Search Terms
+at 0/20, no Categories, no Themes. Only the app name and the EN short description survived (the
+portal auto-saves those). Everything else was re-entered and saved on 2026-09-04 — see above.
+
+**Filled (unsaved) on 2026-08-20:** short description AR (v2), long description AR + EN, Categories
+= `Marketing`, App Themes ×3, Supported Countries = Saudi Arabia only, Search Terms 20/20, all
+three contact emails, Privacy Policy URL.
 
 ⚠️ **The wizard re-renders and resizes between clicks**, and during the fill session it accepted
 several mis-clicks (two extra countries, a `Chat` category, two unwanted themes — all reverted and
@@ -33,21 +73,23 @@ visually re-checked). Treat a visual read-back of Basic Info as part of finishin
 
 ## 1. Basic Info
 
-| Field | Source | State 2026-08-20 |
+| Field | Source | State 2026-09-05 |
 |---|---|---|
 | App Name | `Jawab24` | ✅ filled |
 | Short Description | `SALLA_LISTING_BRIEF.md` §2 — **v2** (the one naming واتساب) | ✅ AR replaced with v2 in the fill session; EN present |
-| App Description (long) | `SALLA_LISTING_BRIEF.md` §2 — Arabic ~250w, English ~230w | ✅ AR + EN pasted, **minus the «العربات المتروكة (قريباً)» bullet** (unshipped claim — see §3) and with no «فريق سعودي» clause. Owner signed off in session |
-| App Logo | `icon-512.png` (512×512, 58 KB) | ⏳ required; upload is a human drag-and-drop — the extension cannot open a file picker. Staged at `~/Downloads/salla-listing/` |
-| Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; **no video is produced** | 🔴 empty and **BLOCKING** — starred required AND confirmed to fail Save Draft (`Educational Video URL: Invalid url`). This map previously called it "optional, ship without it"; that was wrong. Now a hard prerequisite |
-| Categories | see **Sub-category correction** below | ✅ set to **Marketing** (the wrong `Cross-sell / Upsell` is gone) |
-| App Themes (1–3, required) | see **App Themes** below | ✅ the three chosen are set in the portal |
-| Supported Countries | **decided 2026-08-20: SA · UAE · KW (D-094)** — see below | ⚠️ the fill session set **Saudi Arabia only**; add UAE + Kuwait at the next sitting |
-| Search Terms (20/20) | **paste-ready list below** | ✅ all 20 entered in order |
+| App Description (long) | `SALLA_LISTING_BRIEF.md` §2 — Arabic ~250w, English ~230w | ❌ **EMPTY** (0 chars on the 2026-09-04 live read; the 08-20 paste never persisted). When pasting: drop the «العربات المتروكة (قريباً)» bullet, the «فريق سعودي» clause AND the «بدون بطاقة ائتمان» closer — see §3 |
+| App Logo | `icon-512.png` (512×512, 58 KB) | ✅ **uploaded 2026-09-04** via chrome-devtools `upload_file` (the field takes a local path — no human drag-and-drop needed) |
+| Educational Video | `SALLA_LISTING_BRIEF.md` §5 has the 60–90s script; **no video is produced** | ⏭ empty — **required at Submit, NOT at Save Draft** (the draft saved 2026-09-04 with this field empty). This map has swung twice on it ("optional" → "blocks the save"); the measured truth is the middle: a pre-submit dependency. It is the long pole — start it first. ⛔ never a placeholder URL |
+| Categories | see **Sub-category correction** below | ❌ **EMPTY** on the 2026-09-04 live read (the 08-20 `Marketing` pick never persisted). Owner call: `Chat` vs `Marketing` from the live taxonomy |
+| App Themes (1–3, required) | see **App Themes** below | ✅ the three chosen are set **and saved** (2026-09-04) — «Recover abandoned carts» correctly NOT ticked |
+| Supported Countries | **decided 2026-08-20: SA · UAE · KW (D-094)** — see below | ✅ **SA · UAE · KW set and saved 2026-09-04** (the picker offered all three) |
+| Search Terms (20/20) | **paste-ready list below** | ✅ all 20 entered **and saved 2026-09-04** (a live read that morning found 0/20 — the 08-20 entry had not persisted) |
 
 ### Sub-category correction
 
-The app currently sits under `Category: General App` → `Sub Category: **Cross-sell / Upsell**`.
+⚠️ **Live state 2026-09-04: Categories is EMPTY** — the 08-20 pick did not persist, so this is an open owner decision, not a correction. The live taxonomy offered: Shipping / Accounting / Marketing / Analytics / Email / Geolocation / Site Optimization / SMS / **Chat** / Others; the brief §2 leans `Marketing` over Customer Service. The history below is why `Cross-sell / Upsell` must never be chosen again.
+
+History: on 2026-06-12 the app sat under `Category: General App` → `Sub Category: **Cross-sell / Upsell**`.
 That describes a merchandising widget, not a reply assistant, and it is what a merchant browsing
 the store will filter on. The brief (§2) leans **Marketing / Sales (التسويق / المبيعات)** over
 Customer Service to match the sales-rep positioning. Pick from Salla's live taxonomy at fill time
@@ -109,10 +151,13 @@ Two things this table settles: the **Promotional Banner and Embedded App Banner 
 labelled Optional** (so the "one asset still owed" worry in §3 is closed — nothing is owed), and
 **Support Phone carries no star**.
 
-⛔ **Educational Video is starred and genuinely blocks the save** — confirmed, not assumed. Do **not**
-paste an unrelated or placeholder URL to clear it. The honest path is producing the 60–90s screencast
-from the script in `SALLA_LISTING_BRIEF.md` §5. It is now a hard prerequisite for saving a draft at
-all, so it belongs on the critical path beside the pricing question.
+~~⛔ Educational Video is starred and genuinely blocks the save~~ — **RETRACTED 2026-09-04.** The
+draft saved with the video field **empty**, so an empty video does not block Save Draft; the
+`Invalid url` above was raised on the 08-20 attempt under conditions not reproduced since (an empty
+field passes). The star means *required at Submit*. Still: do **not** paste an unrelated or
+placeholder URL to clear it at Submit time. The honest path is the 60–90 s screencast from
+`SALLA_LISTING_BRIEF.md` §5 — the longest-lead item left, so it belongs at the top of the founder's
+list even though it no longer gates the draft.
 
 ### Search Terms — paste these 20
 
@@ -153,10 +198,9 @@ actually converts once the listing has traffic.
 
 ### Supported Countries — **Saudi Arabia · UAE · Kuwait** (owner-decided 2026-08-20, **D-094**)
 
-⚠️ The 2026-08-20 fill session set **Saudi Arabia only** (before this ruling was recorded); UAE and
-Kuwait are still to be added. Salla's publishing-standards article lists this field as "UAE or
-Saudi Arabia" — the picker accepted more than two countries on 2026-08-20, so Kuwait is probably
-offered, but confirm it is actually there before recording it as ticked.
+✅ **Set and saved 2026-09-04: Saudi Arabia · UAE · Kuwait.** The picker offers all three (plus
+QA/BH/OM/JO), so the D-094 second open check («is Kuwait actually in the picker?») is answered:
+yes. (The 08-20 session had set Saudi Arabia only, and that never persisted anyway.)
 
 Tick the three countries where Salla **registers merchants**: 🇸🇦 Saudi Arabia, 🇦🇪 UAE, 🇰🇼 Kuwait.
 
@@ -200,14 +244,15 @@ the first real install got 401 on every delivery. The portal is the whole grant;
 
 | Slot | File | Note |
 |---|---|---|
-| Screenshots (min 3) | `gallery-1.png`, `gallery-2.png`, `gallery-3.png` | 1366×768, already the exact required count and size |
-| Key Benefits ×3 | `benefit-1..3.png` + titles/descriptions in `benefits.md` | 1600×1600 |
+| Screenshots (min 3) | `gallery-1.png`, `gallery-2.png`, `gallery-3.png` | ✅ **uploaded 3/3 and saved 2026-09-04** (re-shot set from #1048). 1366×768 — the field *recommends* 1600×900 (same 16:9); the shoot chose 1366 for text legibility in the 1160 px frame, accepted knowingly |
+| Key Benefits ×3 | `benefit-1..3.png` + titles/descriptions in `benefits.md` | 1600×1600 — ❌ **not entered.** ⚠️ No Benefits slot was found on step 3 on 2026-09-04 (only Screenshots + an optional 1400×600 Promotional Banner). The 08-20 validator DID name `Benefit 1/2/3 - Image/Title/Description` as required, so the slot exists somewhere — locate it (possibly step 2) before the next sitting |
 | Promotional Banner | ❌ not produced | ✅ **confirmed Optional in the portal** (labelled so explicitly, 2026-08-20) — no asset is owed. Leave empty |
 | Embedded App Banner | ❌ not produced | Only needed for embedded apps — we are headless, expect optional |
 
-⚠️ `README.md` §"Compromises" flags that the screenshots show dev fixtures (“Test User / Test
-Workspace”, «متجر تجريبي»). Decide whether that is acceptable before upload — re-rendering is
-`cd sources && node render.js`.
+~~⚠️ `README.md` §"Compromises" flags that the screenshots show dev fixtures~~ — **superseded
+2026-09-04**: the gallery was re-shot with one realistic merchant («أزياء الخليج») and
+review-corrected in #1048; the uploaded set is that one. ⛔ `node render.js` alone can never
+re-shoot — see `README.md` for `sources/capture.js` + `stage.sh`.
 
 ### ⛔ Two bullets in the brief's draft must NOT be pasted
 
