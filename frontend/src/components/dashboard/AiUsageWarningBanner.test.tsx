@@ -302,15 +302,53 @@ describe('AiUsageWarningBanner — billing paused (gate refuses)', () => {
         expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'billing-paused');
     });
 
-    it('never leaves an iOS merchant with a pinned alert and nowhere to go', () => {
-        // UpgradeCTA returns null on iOS (Guideline 3.1.1) and the top-up CTA is
-        // suppressed in this state, so the banner had NO action at all — pinned,
-        // undismissable, and silent about where renewal happens.
+    it('names no purchase channel on iOS — not even in prose', () => {
+        // This assertion used to be its own inverse: it REQUIRED "Renew from the
+        // Jawab24 website" on iOS, on the reasoning that a pinned alert with no
+        // action needed somewhere to point. That sentence is a call to action for
+        // a purchase outside the app, which Guideline 3.1.1 forbids as an
+        // "explicit direction" — buttons are not the only prohibited form. Seen
+        // on a physical iPhone in build 11 while preparing the App Review reply
+        // (2026-09-05). The banner still states the fact; it just stops steering.
         mockIsIOSNative.mockReturnValue(true);
         render(<AiUsageWarningBanner planSlug="starter" aiReplies={lapsed()} autoReply={blocked} />);
 
+        expect(screen.getByTestId('ai-usage-warning-banner')).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /renew subscription/i })).not.toBeInTheDocument();
-        expect(screen.getByText(/renew from the jawab24 website/i)).toBeInTheDocument();
+        expect(screen.queryByText(/website/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/jawab24\.com/i)).not.toBeInTheDocument();
+    });
+
+    it('drops the "until you choose a plan" clause on iOS but keeps the fact', () => {
+        // The trial-ended body ends "...going unanswered until you choose a plan",
+        // which steers to a purchase just as plainly as a button would.
+        mockIsIOSNative.mockReturnValue(true);
+        render(
+            <AiUsageWarningBanner
+                planSlug="starter"
+                aiReplies={lapsed()}
+                autoReply={blocked}
+                cause="trial_expired"
+            />,
+        );
+
+        expect(screen.getByText(/going unanswered/i)).toBeInTheDocument();
+        expect(screen.queryByText(/choose a plan/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/until you renew/i)).not.toBeInTheDocument();
+    });
+
+    it('keeps the steering copy on web, where it is correct and useful', () => {
+        mockIsIOSNative.mockReturnValue(false);
+        render(
+            <AiUsageWarningBanner
+                planSlug="starter"
+                aiReplies={lapsed()}
+                autoReply={blocked}
+                cause="trial_expired"
+            />,
+        );
+
+        expect(screen.getByText(/until you choose a plan/i)).toBeInTheDocument();
     });
 
     it('states what the block has cost — the unanswered-message count', () => {

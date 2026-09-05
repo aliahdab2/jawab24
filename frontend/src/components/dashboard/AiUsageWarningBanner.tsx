@@ -6,7 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA, InfoPopover } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { isIOSNative } from '@/lib/capacitor';
+import { iosOr } from '@/lib/iosCopy';
 import { formatQuotaResetDate } from '@/lib/formatDate';
 import { resolveAiQuotaStatus, type UsageSummary } from '@jawab24/shared';
 
@@ -264,7 +264,16 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                         null on unmetered plans, which this state no longer skips. */}
                     {isBillingPaused ? (
                         <p className="text-xs sm:text-sm opacity-80 mt-1">
-                            <span className="block">{tSub(isTrialEnded ? 'limitBanner.trialEndedBody' : 'limitBanner.billingPausedBody')}</span>
+                            <span className="block">
+                                {/* iOS gets the same fact with the last clause removed: "until you
+                                    choose a plan / renew" is a call to action for a purchase outside
+                                    the app (App Store Guideline 3.1.1). One iOS key for both states —
+                                    a trial that ran out and a subscription that ended say the same
+                                    thing there, and there is nothing they may tell the merchant to do. */}
+                                {tSub(isTrialEnded
+                                    ? iosOr('limitBanner.pausedBodyIOS', 'limitBanner.trialEndedBody')
+                                    : iosOr('limitBanner.pausedBodyIOS', 'limitBanner.billingPausedBody'))}
+                            </span>
                             {coverageEndedDate && (
                                 <span className="block">
                                     {tSub('limitBanner.coverageEndedOn', { date: coverageEndedDate })}
@@ -318,17 +327,12 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMet
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {/* iOS renders NO billing control: UpgradeCTA returns null under
-                        App Store Guideline 3.1.1, and the top-up CTA is suppressed in
-                        this state — which left a pinned, undismissable "your replies
-                        are frozen" alert with nothing to press and nowhere named.
-                        Plain text, no link and no price, keeps the reader-app model
-                        while telling the merchant where renewal actually happens. */}
-                    {isBillingPaused && isIOSNative() && (
-                        <p className="text-xs sm:text-sm font-semibold opacity-90 max-w-[16rem]">
-                            {tSub('limitBanner.renewOnWebHint')}
-                        </p>
-                    )}
+                    {/* iOS renders NO billing control and NO pointer to one: UpgradeCTA
+                        returns null under App Store Guideline 3.1.1, and a text hint
+                        naming the website was itself a call to action for a purchase
+                        outside the app — the guideline forbids "explicit directions",
+                        not just buttons. The title, body, coverage date and unanswered
+                        count above state the fact; on iOS that is where it ends. */}
                     {/* Customize-fallback shortcut surfaces only when Smart Replies are
                         genuinely paused (no top-up). On top-up the fallback never fires,
                         so prompting the merchant to configure it would mislead. Visible on
